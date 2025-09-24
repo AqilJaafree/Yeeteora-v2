@@ -59,7 +59,7 @@ export function AppNavbar({ links }: NavbarProps) {
         return (
             <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-50">
                 <nav className="relative">
-                    <div className="flex items-center gap-1.5 px-1.5 py-1 bg-[#1a1b1e]/90 rounded-2xl border border-white/5">
+                    <div className="flex items-center gap-1.5 px-1.5 py-1 bg-[#1a1b1e]/90 rounded-[8px] border border-white/5">
                         {links.map(({ label, path }) => (
                             <button
                                 key={path}
@@ -83,7 +83,7 @@ export function AppNavbar({ links }: NavbarProps) {
     return (
         <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-50">
             <nav className="relative">
-                <div className="flex items-center gap-3 px-3 py-2.5 bg-[#1a1b1e]/90 rounded-full border border-white/5">
+                <div className="flex items-center gap-3 px-3 py-2.5 bg-[#1a1b1e]/90 rounded-[8px] border border-white/5">
                     {links.map(({ label, path }) => {
                         const active = isActive(path)
                         return (
@@ -91,14 +91,14 @@ export function AppNavbar({ links }: NavbarProps) {
                                 key={path}
                                 onClick={() => handleNavigation(path)}
                                 className={`relative flex flex-col items-center gap-0.5 px-2 py-1 transition-all duration-300 ${active
-                                    ? 'bg-primary text-white rounded-2xl'
+                                    ? 'bg-primary text-white rounded-[8px]'
                                     : 'text-white/50 hover:text-white/80'
                                     }`}
                             >
                                 <div className="relative z-10">
                                     {getIcon(label)}
                                 </div>
-                                <span className={`text-[10px] font-serif transition-all duration-300 ${active ? 'text-white' : 'text-white/40'}`}>
+                                <span className={`text-[10px] font-serif text-nowrap transition-all duration-300 ${active ? 'text-white' : 'text-white/40'}`}>
                                     {getPageTag(label)}
                                 </span>
                             </button>
@@ -106,7 +106,7 @@ export function AppNavbar({ links }: NavbarProps) {
                     })}
                 </div>
 
-                <div className="absolute -inset-[0.5px] bg-gradient-to-t from-white/10 to-transparent rounded-full pointer-events-none" />
+                <div className="absolute -inset-[0.5px] bg-gradient-to-t from-white/10 to-transparent rounded-[8px] pointer-events-none" />
             </nav>
         </div>
     )

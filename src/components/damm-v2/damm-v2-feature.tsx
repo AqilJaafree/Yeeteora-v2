@@ -170,7 +170,7 @@ export default function DammV2Feature() {
   return (
     <div className="min-h-screen">
       <AppHero title="Alpha call Damm v2" subtitle="Next-generation Dynamic Automated Market Making strategies" />
-      <div className="px-4 flex justify-between items-center">
+      <div className="lg:px-[70px] px-4 mx-auto flex justify-between items-center">
         <div className="flex items-center gap-2">
           {isMounted && (
             <div className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
@@ -183,7 +183,7 @@ export default function DammV2Feature() {
           New Pool
         </Button>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
+      <div className="lg:px-[70px] px-4 mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
         {tokenArray.map((token) => (
           <TokenCard key={token.mint} token={token} />
         ))}
