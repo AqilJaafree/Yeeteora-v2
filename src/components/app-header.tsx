@@ -107,13 +107,13 @@ export function AppHeader() {
         <div className="flex items-center gap-4">
           <Button 
             variant={'secondary'} 
-            className="flex items-center gap-2" 
+            className="flex items-center md:gap-2 gap-0" 
             onClick={handleToggleNotifications}
             disabled={isButtonDisabled()}
           >
             {getButtonIcon()}
             <span className="hidden sm:inline">{getButtonText()}</span>
-            <span className="sm:hidden">{notificationsEnabled ? 'On' : 'Off'}</span>
+            <span className="sm:hidden">{notificationsEnabled ? '' : ''}</span>
           </Button>
           <WalletButton />
         </div>

@@ -484,7 +484,7 @@ export function TokenCard({ token }: TokenCardProps) {
     if (isCheckingPool || poolExists === null) {
       return 'bg-gray-500 hover:bg-gray-600'
     }
-    return 'bg-green-600 hover:bg-green-700'
+    return 'bg-green-600 hover:bg-green-500 border-none'
   }
 
   // Alert logic
@@ -527,7 +527,7 @@ export function TokenCard({ token }: TokenCardProps) {
                     )}
                   </span>
                   <span className="text-gray-400 text-xs">•</span>
-                  <span className="text-xs text-gray-400 truncate">{token.mint}</span>
+                  <span className="text-xs text-gray-400 truncate">{token.mint.slice(0, 8)}...{token.mint.slice(-8)}</span>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -604,39 +604,39 @@ export function TokenCard({ token }: TokenCardProps) {
 
         <CardContent className="grid grid-cols-2 gap-4 text-sm">
           <div>
-            <div className="text-gray-400">Changes Jupiter</div>
-            <div className="text-lg text-green-500">
+            <div className="text-muted-foreground text-xs font-serif">Changes Jupiter</div>
+            <div className="text-[1rem] text-green-500">
               +{token.delta_jup} ({(token.delta_jupiter_trade_size / 1_000_000_000).toFixed(2)} SOL)
             </div>
           </div>
           <div>
-            <div className="text-gray-400">Changes Non-Jupiter</div>
-            <div className="text-lg">
+            <div className="text-muted-foreground text-xs font-serif">Changes Non-Jupiter</div>
+            <div className="text-[1rem]">
               +{token.delta_other} ({(token.delta_total_trade_size / 1_000_000_000).toFixed(2)} SOL)
             </div>
           </div>
           <div>
-            <div className="text-gray-400">Jupiter Txs Pct</div>
-            <div className="text-lg text-green-500">{token.jupiter_pct.toFixed(2)}%</div>
+            <div className="text-muted-foreground text-xs font-serif">Jupiter Txs Pct</div>
+            <div className="text-[1rem] text-green-500">{token.jupiter_pct.toFixed(2)}%</div>
           </div>
           <div>
-            <div className="text-gray-400">Jupiter Size Pct</div>
-            <div className="text-lg text-green-500">
+            <div className="text-muted-foreground text-xs font-serif">Jupiter Size Pct</div>
+            <div className="text-[1rem] text-green-500">
               {((token.delta_jupiter_trade_size / token.delta_total_trade_size) * 100).toFixed(2)}%
             </div>
           </div>
           <div>
-            <div className="text-gray-400">Total Jupiter Txs</div>
+            <div className="text-muted-foreground text-xs font-serif">Total Jupiter Txs</div>
             <div>{token.total_jupiter}</div>
           </div>
         </CardContent>
 
         <CardFooter className="flex flex-col gap-2">
           <div className="flex gap-2 w-full">
-            <Button className="flex-1 bg-[#4a4a6e] hover:bg-[#5a5a7e]" onClick={handleOpenGMGN}>
+            <Button className="flex-1 bg-[#4a4a6e] hover:bg-[#5a5a7e] border-none" onClick={handleOpenGMGN}>
               GMGN
             </Button>
-            <Button className="flex-1 bg-[#4a4a6e] hover:bg-[#5a5a7e]" onClick={handlePumpSwap}>
+            <Button className="flex-1 bg-[#4a4a6e] hover:bg-[#5a5a7e] border-none" onClick={handlePumpSwap}>
               SWAP
             </Button>
           </div>
@@ -665,76 +665,112 @@ export function TokenCard({ token }: TokenCardProps) {
           )}
 
           {/* Pool List Dropdown */}
-          {showPoolList && availablePools.length > 0 && (
-            <div className="w-full bg-[#1a1a2e] border border-gray-600 rounded-lg max-h-48 overflow-y-auto scrollbar-thin scrollbar-track-gray-800 scrollbar-thumb-gray-600 hover:scrollbar-thumb-gray-500">
-              <div className="p-2">
-                <div className="text-xs text-gray-400 mb-2 font-medium">Available Pools (sorted by TVL)</div>
-                {availablePools.map((pool) => (
-                  <div
-                    key={pool.pool_address}
-                    onClick={() => handlePoolSelect(pool)}
-                    className="p-3 hover:bg-[#2a2a3e] rounded cursor-pointer border-b border-gray-700 last:border-b-0 transition-colors"
-                  >
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <div className="text-sm font-medium text-white mb-1">
-                          {pool.token_a_symbol}/{pool.token_b_symbol}
+          <motion.div
+            className="w-full"
+            initial={false}
+            animate={{
+              height: showPoolList ? "auto" : 0,
+              opacity: showPoolList ? 1 : 0,
+            }}
+            transition={{
+              height: { duration: 0.3, ease: "easeInOut" },
+              opacity: { duration: 0.2, ease: "easeInOut" }
+            }}
+            style={{ overflow: "hidden" }}
+          >
+            {availablePools.length > 0 && (
+              <motion.div
+                className="w-full bg-[#1a1a2e] border border-gray-600 rounded-lg max-h-48 overflow-y-auto scrollbar-thin scrollbar-track-gray-800 scrollbar-thumb-gray-600 hover:scrollbar-thumb-gray-500"
+                initial={{ y: -10, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ duration: 0.3, delay: 0.1 }}
+              >
+                <div>
+                  <div className="p-3 text-xs text-primary mb-2 font-medium">Available Pools (sorted by TVL)</div>
+                  {availablePools.map((pool, index) => (
+                    <motion.div
+                      key={pool.pool_address}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{
+                        delay: 0.2 + (index * 0.05),
+                        duration: 0.2,
+                        ease: "easeOut"
+                      }}
+                      onClick={() => handlePoolSelect(pool)}
+                      className="p-3 hover:bg-[#2a2a3e] rounded cursor-pointer border-b border-gray-700 last:border-b-0 transition-colors"
+                    >
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <div className="text-sm font-medium text-white mb-1">
+                            {pool.token_a_symbol}/{pool.token_b_symbol}
+                          </div>
+                          <div className="text-xs text-gray-400 font-serif truncate">
+                            {pool.pool_address.slice(0, 8)}...{pool.pool_address.slice(-8)}
+                          </div>
                         </div>
-                        <div className="text-xs text-gray-400 truncate">
-                          {pool.pool_address.slice(0, 8)}...{pool.pool_address.slice(-8)}
+                        <div className="text-right ml-3 space-y-1">
+                          <div className="text-sm font-medium text-green-400">
+                            {formatTVL(pool.tvl)}
+                          </div>
+                          <div className="text-xs text-blue-400">
+                            Fee: {formatFeePercentage(pool.base_fee || 0, pool.dynamic_fee || 0)}
+                          </div>
+                          <div className="text-xs text-yellow-400">
+                            {getFeeScheduleText(pool.fee_scheduler_mode || 0)}
+                          </div>
                         </div>
                       </div>
-                      <div className="text-right ml-3 space-y-1">
-                        <div className="text-sm font-medium text-green-400">
-                          {formatTVL(pool.tvl)}
-                        </div>
-                        <div className="text-xs text-blue-400">
-                          Fee: {formatFeePercentage(pool.base_fee || 0, pool.dynamic_fee || 0)}
-                        </div>
-                        <div className="text-xs text-yellow-400">
-                          {getFeeScheduleText(pool.fee_scheduler_mode || 0)}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              
-              {/* Custom scrollbar styles */}
-              <style jsx>{`
-                .scrollbar-thin::-webkit-scrollbar {
-                  width: 6px;
-                }
-                .scrollbar-thin::-webkit-scrollbar-track {
-                  background: #374151;
-                  border-radius: 3px;
-                }
-                .scrollbar-thin::-webkit-scrollbar-thumb {
-                  background: #6b7280;
-                  border-radius: 3px;
-                }
-                .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-                  background: #9ca3af;
-                }
-                .scrollbar-thin {
-                  scrollbar-width: thin;
-                  scrollbar-color: #6b7280 #374151;
-                }
-              `}</style>
-            </div>
-          )}
+                    </motion.div>
+                  ))}
+                </div>
 
-          {showPoolList && isLoadingPools && (
-            <div className="w-full bg-[#1a1a2e] border border-gray-600 rounded-lg p-4 text-center">
-              <div className="text-sm text-gray-400">Loading available pools...</div>
-            </div>
-          )}
+                {/* Custom scrollbar styles */}
+                <style jsx>{`
+                  .scrollbar-thin::-webkit-scrollbar {
+                    width: 6px;
+                  }
+                  .scrollbar-thin::-webkit-scrollbar-track {
+                    background: #374151;
+                    border-radius: 3px;
+                  }
+                  .scrollbar-thin::-webkit-scrollbar-thumb {
+                    background: #6b7280;
+                    border-radius: 3px;
+                  }
+                  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+                    background: #9ca3af;
+                  }
+                  .scrollbar-thin {
+                    scrollbar-width: thin;
+                    scrollbar-color: #6b7280 #374151;
+                  }
+                `}</style>
+              </motion.div>
+            )}
 
-          {showPoolList && !isLoadingPools && availablePools.length === 0 && (
-            <div className="w-full bg-[#1a1a2e] border border-gray-600 rounded-lg p-4 text-center">
-              <div className="text-sm text-gray-400">No pools found for this token</div>
-            </div>
-          )}
+            {isLoadingPools && (
+              <motion.div
+                className="w-full bg-[#1a1a2e] border border-gray-600 rounded-lg p-4 text-center"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.2 }}
+              >
+                <div className="text-sm text-gray-400">Loading available pools...</div>
+              </motion.div>
+            )}
+
+            {!isLoadingPools && availablePools.length === 0 && (
+              <motion.div
+                className="w-full bg-[#1a1a2e] border border-gray-600 rounded-lg p-4 text-center"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.2 }}
+              >
+                <div className="text-sm text-gray-400">No pools found for this token</div>
+              </motion.div>
+            )}
+          </motion.div>
         </CardFooter>
       </Card>
     </motion.div>
