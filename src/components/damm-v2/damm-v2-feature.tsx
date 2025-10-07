@@ -109,7 +109,11 @@ export default function DammV2Feature() {
           }
         }
 
-        ws.onerror = () => {
+        ws.onerror = (error) => {
+          // Prevent error from propagating to console
+          if (error && typeof error.preventDefault === 'function') {
+            error.preventDefault()
+          }
           setWsConnected(false)
         }
 
