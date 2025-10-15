@@ -2,7 +2,7 @@
 'use client'
 
 import { useConnection, useWallet } from '@solana/wallet-adapter-react'
-import { PublicKey } from '@solana/web3.js'
+import { PublicKey, Connection, Keypair } from '@solana/web3.js'
 import { TOKEN_PROGRAM_ID, type Mint } from '@solana/spl-token'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { CpAmm } from '@meteora-ag/cp-amm-sdk'
@@ -129,50 +129,65 @@ export function useAddLiquidity({ poolAddress }: { poolAddress: PublicKey }) {
   })
 }
 
-// Remove liquidity from position
-export function useRemoveLiquidity({ poolAddress }: { poolAddress: PublicKey }) {
+/**
+ * Create a new position and add liquidity to an existing pool
+ * This is what most users will use to add liquidity
+ */
+export function useCreatePositionAndAddLiquidity({ poolAddress }: { poolAddress: PublicKey }) {
   const { connection } = useConnection()
   const { publicKey, sendTransaction } = useWallet()
   const client = useQueryClient()
 
   return useMutation({
-    mutationKey: ['remove-liquidity-damm-v2', { endpoint: connection.rpcEndpoint, pool: poolAddress.toString() }],
+    mutationKey: ['create-position-add-liquidity', { endpoint: connection.rpcEndpoint, pool: poolAddress.toString() }],
     mutationFn: async (input: {
-      positionAddress: PublicKey
-      positionNftAccount: PublicKey
-      liquidityDelta: BN
+      tokenAAmount: BN
+      tokenBAmount: BN
     }) => {
       if (!publicKey) throw new Error('Wallet not connected')
 
       const cpAmm = new CpAmm(connection)
       const poolState = await cpAmm.fetchPoolState(poolAddress)
 
-      const removeLiqTx = await cpAmm.removeLiquidity({
+      // Calculate liquidity delta
+      const liquidityDelta = cpAmm.getLiquidityDelta({
+        maxAmountTokenA: input.tokenAAmount,
+        maxAmountTokenB: input.tokenBAmount,
+        sqrtMaxPrice: poolState.sqrtMaxPrice,
+        sqrtMinPrice: poolState.sqrtMinPrice,
+        sqrtPrice: poolState.sqrtPrice,
+      }) as BN
+
+      // Generate new position NFT keypair
+      const positionNft = Keypair.generate()
+
+      // Create position and add liquidity in one transaction
+      const tx = await cpAmm.createPositionAndAddLiquidity({
         owner: publicKey,
         pool: poolAddress,
-        position: input.positionAddress,
-        positionNftAccount: input.positionNftAccount,
-        liquidityDelta: input.liquidityDelta,
-        tokenAAmountThreshold: new BN(0),
-        tokenBAmountThreshold: new BN(0),
+        positionNft: positionNft.publicKey, // Changed from positionNftAccount
+        liquidityDelta,
+        maxAmountTokenA: input.tokenAAmount,
+        maxAmountTokenB: input.tokenBAmount,
+        tokenAAmountThreshold: input.tokenAAmount,
+        tokenBAmountThreshold: input.tokenBAmount,
         tokenAMint: poolState.tokenAMint,
         tokenBMint: poolState.tokenBMint,
-        tokenAVault: poolState.tokenAVault,
-        tokenBVault: poolState.tokenBVault,
         tokenAProgram: TOKEN_PROGRAM_ID,
         tokenBProgram: TOKEN_PROGRAM_ID,
-        currentPoint: new BN(Math.floor(Date.now() / 1000)),
-        vestings: [],
       })
 
-      const signature = await sendTransaction(removeLiqTx, connection)
+      const signature = await sendTransaction(tx, connection, {
+        signers: [positionNft],
+      })
 
       await connection.confirmTransaction(signature, 'confirmed')
-      return signature
+
+      return { signature, position: positionNft.publicKey }
     },
-    onSuccess: async (signature) => {
-      toast.success('Liquidity removed successfully!', {
-        description: `Transaction: ${signature.slice(0, 8)}...${signature.slice(-8)}`,
+    onSuccess: async ({ signature, position }) => {
+      toast.success('Position created and liquidity added!', {
+        description: `Position: ${position.toString().slice(0, 8)}...${position.toString().slice(-8)}`,
         action: {
           label: 'View on Solscan',
           onClick: () => window.open(`https://solscan.io/tx/${signature}`, '_blank'),
@@ -183,76 +198,12 @@ export function useRemoveLiquidity({ poolAddress }: { poolAddress: PublicKey }) 
         queryKey: ['damm-v2-positions'],
       })
       await client.invalidateQueries({
-        queryKey: ['damm-v2-position-state'],
+        queryKey: ['damm-v2-pool-state'],
       })
     },
     onError: (error) => {
-      console.error('Remove liquidity error:', error)
-      toast.error('Failed to remove liquidity', {
-        description: error instanceof Error ? error.message : 'Unknown error',
-      })
-    },
-  })
-}
-
-// Remove all liquidity from position
-export function useRemoveAllLiquidity({ poolAddress }: { poolAddress: PublicKey }) {
-  const { connection } = useConnection()
-  const { publicKey, sendTransaction } = useWallet()
-  const client = useQueryClient()
-
-  return useMutation({
-    mutationKey: ['remove-all-liquidity-damm-v2', { endpoint: connection.rpcEndpoint, pool: poolAddress.toString() }],
-    mutationFn: async (input: {
-      positionAddress: PublicKey
-      positionNftAccount: PublicKey
-    }) => {
-      if (!publicKey) throw new Error('Wallet not connected')
-
-      const cpAmm = new CpAmm(connection)
-      const poolState = await cpAmm.fetchPoolState(poolAddress)
-
-      const removeAllTx = await cpAmm.removeAllLiquidity({
-        owner: publicKey,
-        pool: poolAddress,
-        position: input.positionAddress,
-        positionNftAccount: input.positionNftAccount,
-        tokenAAmountThreshold: new BN(0),
-        tokenBAmountThreshold: new BN(0),
-        tokenAMint: poolState.tokenAMint,
-        tokenBMint: poolState.tokenBMint,
-        tokenAVault: poolState.tokenAVault,
-        tokenBVault: poolState.tokenBVault,
-        tokenAProgram: TOKEN_PROGRAM_ID,
-        tokenBProgram: TOKEN_PROGRAM_ID,
-        currentPoint: new BN(Math.floor(Date.now() / 1000)),
-        vestings: [],
-      })
-
-      const signature = await sendTransaction(removeAllTx, connection)
-
-      await connection.confirmTransaction(signature, 'confirmed')
-      return signature
-    },
-    onSuccess: async (signature) => {
-      toast.success('All liquidity removed successfully!', {
-        description: `Transaction: ${signature.slice(0, 8)}...${signature.slice(-8)}`,
-        action: {
-          label: 'View on Solscan',
-          onClick: () => window.open(`https://solscan.io/tx/${signature}`, '_blank'),
-        },
-      })
-      
-      await client.invalidateQueries({
-        queryKey: ['damm-v2-positions'],
-      })
-      await client.invalidateQueries({
-        queryKey: ['damm-v2-position-state'],
-      })
-    },
-    onError: (error) => {
-      console.error('Remove all liquidity error:', error)
-      toast.error('Failed to remove all liquidity', {
+      console.error('Create position and add liquidity error:', error)
+      toast.error('Failed to add liquidity', {
         description: error instanceof Error ? error.message : 'Unknown error',
       })
     },
@@ -316,188 +267,90 @@ export function useRemoveAllLiquidityAndClosePosition({ poolAddress }: { poolAdd
   })
 }
 
-// Claim partner fee
-export function useClaimPartnerFee({ poolAddress }: { poolAddress: PublicKey }) {
-  const { connection } = useConnection()
-  const { publicKey, sendTransaction } = useWallet()
-  const client = useQueryClient()
-
-  return useMutation({
-    mutationKey: ['claim-partner-fee-damm-v2', { endpoint: connection.rpcEndpoint, pool: poolAddress.toString() }],
-    mutationFn: async (input: {
-      maxAmountA: BN
-      maxAmountB: BN
-    }) => {
-      if (!publicKey) throw new Error('Wallet not connected')
-
-      const cpAmm = new CpAmm(connection)
-
-      const claimTx = await cpAmm.claimPartnerFee({
-        partner: publicKey,
-        pool: poolAddress,
-        maxAmountA: input.maxAmountA,
-        maxAmountB: input.maxAmountB,
-      })
-
-      const signature = await sendTransaction(claimTx, connection)
-
-      await connection.confirmTransaction(signature, 'confirmed')
-      return signature
-    },
-    onSuccess: async (signature) => {
-      toast.success('Partner fee claimed successfully!', {
-        description: `Transaction: ${signature.slice(0, 8)}...${signature.slice(-8)}`,
-        action: {
-          label: 'View on Solscan',
-          onClick: () => window.open(`https://solscan.io/tx/${signature}`, '_blank'),
-        },
-      })
-      
-      await client.invalidateQueries({
-        queryKey: ['damm-v2-pool-state'],
-      })
-    },
-    onError: (error) => {
-      console.error('Claim partner fee error:', error)
-      toast.error('Failed to claim partner fee', {
-        description: error instanceof Error ? error.message : 'Unknown error',
-      })
-    },
-  })
-}
-
-// Helper function to calculate deposit quote
-export async function calculateDepositQuote(
-  connection: ReturnType<typeof useConnection>['connection'],
-  poolAddress: PublicKey,
-  inAmount: BN,
-  isTokenA: boolean,
-  inputTokenInfo?: { mint: Mint; currentEpoch: number },
-  outputTokenInfo?: { mint: Mint; currentEpoch: number }
-) {
-  const cpAmm = new CpAmm(connection)
-  const poolState = await cpAmm.fetchPoolState(poolAddress)
-
-  return await cpAmm.getDepositQuote({
-    inAmount,
-    isTokenA,
-    minSqrtPrice: poolState.sqrtMinPrice,
-    maxSqrtPrice: poolState.sqrtMaxPrice,
-    sqrtPrice: poolState.sqrtPrice,
-    inputTokenInfo,
-    outputTokenInfo,
-  })
-}
-
-// Helper function to calculate withdraw quote
-export async function calculateWithdrawQuote(
-  connection: ReturnType<typeof useConnection>['connection'],
-  poolAddress: PublicKey,
-  liquidityDelta: BN
-) {
-  const cpAmm = new CpAmm(connection)
-  const poolState = await cpAmm.fetchPoolState(poolAddress)
-
-  return await cpAmm.getWithdrawQuote({
-    liquidityDelta,
-    sqrtPrice: poolState.sqrtPrice,
-    minSqrtPrice: poolState.sqrtMinPrice,
-    maxSqrtPrice: poolState.sqrtMaxPrice,
-  })
-}
-
-// Helper function to calculate swap quote (exact input)
-export async function calculateSwapQuote(
-  connection: ReturnType<typeof useConnection>['connection'],
-  poolAddress: PublicKey,
-  inAmount: BN,
-  inputTokenMint: PublicKey,
-  slippage: number,
-  tokenADecimal: number,
-  tokenBDecimal: number,
-  inputTokenInfo?: { mint: Mint; currentEpoch: number },
-  outputTokenInfo?: { mint: Mint; currentEpoch: number }
-) {
-  const cpAmm = new CpAmm(connection)
-  const poolState = await cpAmm.fetchPoolState(poolAddress)
-  
-  // Get current time and slot
-  const currentTime = Math.floor(Date.now() / 1000)
-  const slot = await connection.getSlot()
-
-  return await cpAmm.getQuote({
-    inAmount,
-    inputTokenMint,
-    slippage,
-    poolState,
-    currentTime,
-    currentSlot: slot,
-    tokenADecimal,
-    tokenBDecimal,
-    inputTokenInfo,
-    outputTokenInfo,
-  })
-}
-
 // Helper to get CpAmm instance
-export function getCpAmmInstance(connection: ReturnType<typeof useConnection>['connection']) {
+export function getCpAmmInstance(connection: Connection) {
   return new CpAmm(connection)
 }
 
 // Create custom pool with dynamic config
-export function useCreateCustomPool() {
+export function useCreateDammV2Pool() {
   const { connection } = useConnection()
   const { publicKey, sendTransaction } = useWallet()
   const client = useQueryClient()
 
   return useMutation({
-    mutationKey: ['create-custom-pool-damm-v2', { endpoint: connection.rpcEndpoint }],
+    mutationKey: ['create-damm-v2-pool', { endpoint: connection.rpcEndpoint }],
     mutationFn: async (input: {
-      config: PublicKey
-      poolCreatorAuthority?: PublicKey
-      positionNft: PublicKey
+      // Required: Token Configuration
       tokenAMint: PublicKey
       tokenBMint: PublicKey
-      tokenAAmount: BN
-      tokenBAmount: BN
+      tokenAAmount: BN // Raw amount with decimals
+      tokenBAmount: BN // Raw amount with decimals
+      
+      // Required: Price Configuration
+      initPrice: number // Initial price (token B per token A)
+      minPrice: number // Minimum price for concentrated liquidity
+      maxPrice: number // Maximum price for concentrated liquidity
+      
+      // Required: Decimals
       tokenADecimal: number
       tokenBDecimal: number
-      initPrice: number
-      minPrice: number
-      maxPrice: number
-      // Fee Scheduler Configuration
+      
+      // Required: Fee Configuration
+      baseFeeNumerator: number // Base fee in basis points (e.g., 25 = 0.25%)
+      maxDynamicFee: number // Max dynamic fee in basis points (e.g., 25 = 0.25%)
+      
+      // Optional: Fee Scheduler (anti-sniper)
       enableFeeScheduler?: boolean
-      baseFeeNumerator: number // base fee in basis points (e.g., 25 = 0.25%)
-      endFeeNumerator?: number // end fee in basis points (only if fee scheduler enabled)
+      endFeeNumerator?: number // End fee in basis points (only if scheduler enabled)
       feeSchedulerMode?: number // 0: Linear, 1: Exponential
-      numberOfPeriods?: number // number of fee reduction periods
-      periodFrequency?: number // frequency in seconds or slots
-      // Dynamic Fee Configuration
-      maxDynamicFee: number // max dynamic fee in basis points (e.g., 25 = 0.25%)
-      hasAlphaVault?: boolean
+      numberOfPeriods?: number // Number of fee reduction periods
+      periodFrequency?: number // Frequency in seconds
+      
+      // Optional: Pool Features
       collectFeeMode?: number // 0: Both tokens, 1: Only token B
-      activationPoint?: BN | null
+      hasAlphaVault?: boolean // Enable alpha vault (presale)
+      activationPoint?: BN | null // When pool activates
       activationType?: number // 0: slot, 1: timestamp
+      
+      // Optional: Config & Authority
+      config?: PublicKey // Pool config key (uses default if not provided)
+      poolCreatorAuthority?: PublicKey // Pool creator authority
     }) => {
       if (!publicKey) throw new Error('Wallet not connected')
 
       const cpAmm = new CpAmm(connection)
 
-      // Helper functions from SDK
-      const getSqrtPriceFromPrice = (price: string, tokenADecimals: number, tokenBDecimals: number): BN => {
-        const priceNum = parseFloat(price)
-        const decimalDiff = tokenBDecimals - tokenADecimals
-        const adjustedPrice = priceNum * Math.pow(10, decimalDiff)
+      // Helper: Calculate sqrt price from regular price
+      const getSqrtPriceFromPrice = (
+        price: number,
+        tokenADec: number,
+        tokenBDec: number
+      ): BN => {
+        const decimalDiff = tokenBDec - tokenADec
+        const adjustedPrice = price * Math.pow(10, decimalDiff)
         const sqrtPrice = Math.sqrt(adjustedPrice)
         return new BN(Math.floor(sqrtPrice * Math.pow(2, 64)))
       }
 
       // Calculate sqrt prices
-      const sqrtPrice = getSqrtPriceFromPrice(input.initPrice.toString(), input.tokenADecimal, input.tokenBDecimal)
-      const sqrtMinPrice = getSqrtPriceFromPrice(input.minPrice.toString(), input.tokenADecimal, input.tokenBDecimal)
-      const sqrtMaxPrice = getSqrtPriceFromPrice(input.maxPrice.toString(), input.tokenADecimal, input.tokenBDecimal)
+      const sqrtPrice = getSqrtPriceFromPrice(
+        input.initPrice,
+        input.tokenADecimal,
+        input.tokenBDecimal
+      )
+      const sqrtMinPrice = getSqrtPriceFromPrice(
+        input.minPrice,
+        input.tokenADecimal,
+        input.tokenBDecimal
+      )
+      const sqrtMaxPrice = getSqrtPriceFromPrice(
+        input.maxPrice,
+        input.tokenADecimal,
+        input.tokenBDecimal
+      )
 
-      // Get liquidity delta - SDK returns BN directly
+      // Calculate liquidity delta
       const liquidityDelta = cpAmm.getLiquidityDelta({
         maxAmountTokenA: input.tokenAAmount,
         maxAmountTokenB: input.tokenBAmount,
@@ -506,7 +359,7 @@ export function useCreateCustomPool() {
         sqrtPrice,
       }) as BN
 
-      // Base fee params helper - Updated to match SDK structure
+      // Build base fee params
       const getBaseFeeParams = (
         cliffFee: number,
         endFee: number,
@@ -537,7 +390,7 @@ export function useCreateCustomPool() {
         }
       }
 
-      // Dynamic fee params helper
+      // Build dynamic fee params
       const getDynamicFeeParams = (maxFee: number) => {
         return {
           initialized: true,
@@ -548,20 +401,20 @@ export function useCreateCustomPool() {
           reductionFactor: 5000,
           variableFeeControl: 2000000,
           maxVolatilityAccumulator: 100000,
-          maxDynamicFee: maxFee * 10000, // Convert basis points to fee numerator
+          maxDynamicFee: maxFee * 10000,
         }
       }
 
       // Build pool fees configuration
       const baseFeeParams = getBaseFeeParams(
-        input.baseFeeNumerator,
-        input.endFeeNumerator ?? input.baseFeeNumerator, // If no end fee, keep it flat
+        input.baseFeeNumerator / 10000, // Convert basis points back to decimal
+        input.enableFeeScheduler ? (input.endFeeNumerator || input.baseFeeNumerator) / 10000 : input.baseFeeNumerator / 10000,
         input.feeSchedulerMode ?? 0,
         input.enableFeeScheduler ? (input.numberOfPeriods ?? 0) : 0,
         input.enableFeeScheduler ? (input.periodFrequency ?? 0) : 0
       )
 
-      const dynamicFeeParams = getDynamicFeeParams(input.maxDynamicFee)
+      const dynamicFeeParams = getDynamicFeeParams(input.maxDynamicFee / 10000)
 
       const poolFees = {
         baseFee: baseFeeParams,
@@ -569,13 +422,21 @@ export function useCreateCustomPool() {
         dynamicFee: dynamicFeeParams,
       }
 
+      // Use default config if not provided
+      const configAddress = input.config || new PublicKey(
+        'CPMMooJH2TY8zVr43UzoPBfLNFVxJh8M3A6ARaYRkMz3'
+      )
+
+      // Generate position NFT keypair
+      const positionNft = Keypair.generate()
+
       // Create pool
       const { tx, pool, position } = await cpAmm.createCustomPoolWithDynamicConfig({
         payer: publicKey,
         creator: publicKey,
-        config: input.config,
+        config: configAddress,
         poolCreatorAuthority: input.poolCreatorAuthority || publicKey,
-        positionNft: input.positionNft,
+        positionNft: positionNft.publicKey,
         tokenAMint: input.tokenAMint,
         tokenBMint: input.tokenBMint,
         tokenAAmount: input.tokenAAmount,
@@ -593,7 +454,10 @@ export function useCreateCustomPool() {
         tokenBProgram: TOKEN_PROGRAM_ID,
       })
 
-      const signature = await sendTransaction(tx, connection)
+      const signature = await sendTransaction(tx, connection, {
+        signers: [positionNft],
+      })
+
       await connection.confirmTransaction(signature, 'confirmed')
 
       return { signature, pool, position }
@@ -602,8 +466,8 @@ export function useCreateCustomPool() {
       toast.success('Pool created successfully!', {
         description: `Pool: ${pool.toString().slice(0, 8)}...${pool.toString().slice(-8)}`,
         action: {
-          label: 'View on Solscan',
-          onClick: () => window.open(`https://solscan.io/tx/${signature}`, '_blank'),
+          label: 'View on Meteora',
+          onClick: () => window.open(`https://meteora.ag/dammv2/${pool.toString()}`, '_blank'),
         },
       })
 
@@ -617,5 +481,78 @@ export function useCreateCustomPool() {
         description: error instanceof Error ? error.message : 'Unknown error',
       })
     },
+  })
+}
+
+// Helper function to calculate deposit quote (useful for UI)
+export async function calculateDepositQuote(
+  connection: Connection,
+  poolAddress: PublicKey,
+  inAmount: BN,
+  isTokenA: boolean,
+  inputTokenInfo?: { mint: Mint; currentEpoch: number },
+  outputTokenInfo?: { mint: Mint; currentEpoch: number }
+) {
+  const cpAmm = new CpAmm(connection)
+  const poolState = await cpAmm.fetchPoolState(poolAddress)
+
+  return await cpAmm.getDepositQuote({
+    inAmount,
+    isTokenA,
+    minSqrtPrice: poolState.sqrtMinPrice,
+    maxSqrtPrice: poolState.sqrtMaxPrice,
+    sqrtPrice: poolState.sqrtPrice,
+    inputTokenInfo,
+    outputTokenInfo,
+  })
+}
+
+// Helper function to calculate withdraw quote (useful for UI)
+export async function calculateWithdrawQuote(
+  connection: Connection,
+  poolAddress: PublicKey,
+  liquidityDelta: BN
+) {
+  const cpAmm = new CpAmm(connection)
+  const poolState = await cpAmm.fetchPoolState(poolAddress)
+
+  return await cpAmm.getWithdrawQuote({
+    liquidityDelta,
+    sqrtPrice: poolState.sqrtPrice,
+    minSqrtPrice: poolState.sqrtMinPrice,
+    maxSqrtPrice: poolState.sqrtMaxPrice,
+  })
+}
+
+// Helper function to calculate swap quote (exact input)
+export async function calculateSwapQuote(
+  connection: Connection,
+  poolAddress: PublicKey,
+  inAmount: BN,
+  inputTokenMint: PublicKey,
+  slippage: number,
+  tokenADecimal: number,
+  tokenBDecimal: number,
+  inputTokenInfo?: { mint: Mint; currentEpoch: number },
+  outputTokenInfo?: { mint: Mint; currentEpoch: number }
+) {
+  const cpAmm = new CpAmm(connection)
+  const poolState = await cpAmm.fetchPoolState(poolAddress)
+  
+  // Get current time and slot
+  const currentTime = Math.floor(Date.now() / 1000)
+  const slot = await connection.getSlot()
+
+  return await cpAmm.getQuote({
+    inAmount,
+    inputTokenMint,
+    slippage,
+    poolState,
+    currentTime,
+    currentSlot: slot,
+    tokenADecimal,
+    tokenBDecimal,
+    inputTokenInfo,
+    outputTokenInfo,
   })
 }
