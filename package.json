@@ -23,6 +23,7 @@
   "private": true,
   "dependencies": {
     "@coral-xyz/anchor": "^0.31.1",
+    "@meteora-ag/cp-amm-sdk": "^1.1.9",
     "@meteora-ag/dlmm": "^1.5.5",
     "@radix-ui/react-dialog": "^1.1.14",
     "@radix-ui/react-dropdown-menu": "^2.1.15",
