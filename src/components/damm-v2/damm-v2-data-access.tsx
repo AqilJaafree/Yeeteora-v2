@@ -462,7 +462,7 @@ export function useCreateDammV2Pool() {
 
       return { signature, pool, position }
     },
-    onSuccess: async ({ signature, pool }) => {
+    onSuccess: async ({ pool }) => {
       toast.success('Pool created successfully!', {
         description: `Pool: ${pool.toString().slice(0, 8)}...${pool.toString().slice(-8)}`,
         action: {

@@ -1,3 +1,4 @@
+// src/components/damm-v2/damm-v2-feature.tsx
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
@@ -145,6 +146,7 @@ export default function DammV2Feature() {
       if (ws) {
         ws.close(1000, 'Component unmounting')
       }
+      // Capture timers to avoid stale closure warning
       const currentTimers = expiryTimers.current
       Object.values(currentTimers).forEach(clearTimeout)
     }

@@ -1,7 +1,7 @@
 // src/components/damm-v2/damm-v2-add-liquidity.tsx
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useConnection, useWallet } from '@solana/wallet-adapter-react'
 import { PublicKey, Keypair } from '@solana/web3.js'
 import { TOKEN_PROGRAM_ID, getMint } from '@solana/spl-token'
@@ -15,7 +15,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
-import { Plus, Info, AlertTriangle, DollarSign } from 'lucide-react'
+import { Plus, Info, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { CpAmm } from '@meteora-ag/cp-amm-sdk'
 import BN from 'bn.js'
@@ -48,9 +48,68 @@ export function AddLiquidityToPool({
   const [tokenAAmount, setTokenAAmount] = useState('')
   const [tokenBAmount, setTokenBAmount] = useState('')
   const [isCalculating, setIsCalculating] = useState(false)
-  const [estimatedPrice, setEstimatedPrice] = useState<number | null>(null)
+  const [tokenABalance, setTokenABalance] = useState<number>(0)
+  const [tokenBBalance, setTokenBBalance] = useState<number>(0)
+  const [isLoadingBalances, setIsLoadingBalances] = useState(false)
 
-  // Mutation for adding liquidity with position creation
+  // Fetch token balances
+  const fetchBalances = async () => {
+    if (!publicKey) return
+
+    try {
+      setIsLoadingBalances(true)
+
+      // Get token accounts
+      const tokenAccounts = await connection.getParsedTokenAccountsByOwner(publicKey, {
+        programId: TOKEN_PROGRAM_ID,
+      })
+
+      let balanceA = 0
+      let balanceB = 0
+
+      tokenAccounts.value.forEach((accountInfo) => {
+        const parsedInfo = accountInfo.account.data.parsed.info
+        const mintAddress = parsedInfo.mint
+
+        if (mintAddress === tokenAMint) {
+          balanceA = parsedInfo.tokenAmount.uiAmount || 0
+        }
+        if (mintAddress === tokenBMint) {
+          balanceB = parsedInfo.tokenAmount.uiAmount || 0
+        }
+      })
+
+      setTokenABalance(balanceA)
+      setTokenBBalance(balanceB)
+    } catch (error) {
+      console.error('Error fetching balances:', error)
+    } finally {
+      setIsLoadingBalances(false)
+    }
+  }
+
+  // Fetch balances when dialog opens
+  useEffect(() => {
+    if (isOpen && publicKey) {
+      fetchBalances()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, publicKey])
+
+  const setMaxTokenA = () => {
+    if (tokenABalance > 0) {
+      setTokenAAmount(tokenABalance.toString())
+      calculateEstimatedAmount(tokenABalance.toString(), true)
+    }
+  }
+
+  const setMaxTokenB = () => {
+    if (tokenBBalance > 0) {
+      setTokenBAmount(tokenBBalance.toString())
+      calculateEstimatedAmount(tokenBBalance.toString(), false)
+    }
+  }
+
   const addLiquidityMutation = useMutation({
     mutationKey: ['add-liquidity-new-position', poolAddress],
     mutationFn: async (input: {
@@ -64,7 +123,6 @@ export function AddLiquidityToPool({
       const cpAmm = new CpAmm(connection)
       const poolState = await cpAmm.fetchPoolState(new PublicKey(poolAddress))
 
-      // Calculate liquidity delta
       const liquidityDelta = cpAmm.getLiquidityDelta({
         maxAmountTokenA: input.tokenAAmount,
         maxAmountTokenB: input.tokenBAmount,
@@ -73,10 +131,8 @@ export function AddLiquidityToPool({
         sqrtPrice: poolState.sqrtPrice,
       }) as BN
 
-      // Generate new position NFT keypair
       const positionNft = Keypair.generate()
 
-      // Create position and add liquidity in one transaction
       const tx = await cpAmm.createPositionAndAddLiquidity({
         owner: publicKey,
         pool: new PublicKey(poolAddress),
@@ -100,7 +156,7 @@ export function AddLiquidityToPool({
 
       return { signature, position: positionNft.publicKey }
     },
-    onSuccess: async ({ signature, position }) => {
+    onSuccess: async ({ position }) => {
       toast.success('Liquidity added successfully!', {
         description: `Position: ${position.toString().slice(0, 8)}...${position.toString().slice(-8)}`,
         action: {
@@ -125,11 +181,7 @@ export function AddLiquidityToPool({
     },
   })
 
-  // Calculate estimated output when user inputs one amount
-  const calculateEstimatedAmount = async (
-    inputAmount: string,
-    isTokenA: boolean
-  ) => {
+  const calculateEstimatedAmount = async (inputAmount: string, isTokenA: boolean) => {
     if (!inputAmount || parseFloat(inputAmount) <= 0) return
 
     try {
@@ -138,7 +190,6 @@ export function AddLiquidityToPool({
       const cpAmm = new CpAmm(connection)
       const poolState = await cpAmm.fetchPoolState(new PublicKey(poolAddress))
 
-      // Get token decimals
       const [tokenAInfo, tokenBInfo] = await Promise.all([
         getMint(connection, new PublicKey(tokenAMint)),
         getMint(connection, new PublicKey(tokenBMint)),
@@ -147,7 +198,6 @@ export function AddLiquidityToPool({
       const tokenADecimals = tokenAInfo.decimals
       const tokenBDecimals = tokenBInfo.decimals
 
-      // Convert input to raw amount
       const rawAmount = new BN(
         Math.floor(
           parseFloat(inputAmount) *
@@ -155,7 +205,6 @@ export function AddLiquidityToPool({
         )
       )
 
-      // Get deposit quote
       const quote = await cpAmm.getDepositQuote({
         inAmount: rawAmount,
         isTokenA,
@@ -164,26 +213,18 @@ export function AddLiquidityToPool({
         sqrtPrice: poolState.sqrtPrice,
       })
 
-      // Calculate the other token amount needed
       const otherAmount =
         parseFloat(quote.outputAmount.toString()) /
         Math.pow(10, isTokenA ? tokenBDecimals : tokenADecimals)
 
-      // Set the calculated amount
       if (isTokenA) {
         setTokenBAmount(otherAmount.toFixed(6))
       } else {
         setTokenAAmount(otherAmount.toFixed(6))
       }
-
-      // Calculate and set price
-      const price = isTokenA
-        ? otherAmount / parseFloat(inputAmount)
-        : parseFloat(inputAmount) / otherAmount
-      setEstimatedPrice(price)
     } catch (error) {
-      console.error('Error calculating amount:', error)
-      toast.error('Failed to calculate amount')
+      console.error('Error calculating estimate:', error)
+      toast.error('Failed to calculate amounts')
     } finally {
       setIsCalculating(false)
     }
@@ -191,7 +232,7 @@ export function AddLiquidityToPool({
 
   const handleAddLiquidity = async () => {
     if (!publicKey) {
-      toast.error('Please connect your wallet')
+      toast.error('Please connect your wallet first')
       return
     }
 
@@ -201,7 +242,6 @@ export function AddLiquidityToPool({
     }
 
     try {
-      // Get token decimals
       const [tokenAInfo, tokenBInfo] = await Promise.all([
         getMint(connection, new PublicKey(tokenAMint)),
         getMint(connection, new PublicKey(tokenBMint)),
@@ -210,7 +250,6 @@ export function AddLiquidityToPool({
       const tokenADecimals = tokenAInfo.decimals
       const tokenBDecimals = tokenBInfo.decimals
 
-      // Convert to raw amounts
       const tokenAAmountBN = new BN(
         Math.floor(parseFloat(tokenAAmount) * Math.pow(10, tokenADecimals))
       )
@@ -225,7 +264,7 @@ export function AddLiquidityToPool({
         tokenBDecimals,
       })
     } catch (error) {
-      console.error('Add liquidity error:', error)
+      console.error('Error in handleAddLiquidity:', error)
     }
   }
 
@@ -241,11 +280,10 @@ export function AddLiquidityToPool({
       )}
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[500px] bg-[#1a1a2e] border-gray-600 text-white">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <DollarSign className="w-5 h-5 text-primary" />
-              Add Liquidity to Pool
+            <DialogTitle className="flex items-center gap-2 text-white">
+              Adding to: {tokenASymbol}-{tokenBSymbol}
             </DialogTitle>
           </DialogHeader>
 
@@ -253,19 +291,39 @@ export function AddLiquidityToPool({
             {/* Pool Info */}
             <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
               <p className="text-sm font-medium text-blue-400 mb-1">
-                Adding to: {poolName}
+                Pool: {poolName}
               </p>
-              <p className="text-xs text-muted-foreground">
-                Pool: {poolAddress.slice(0, 8)}...{poolAddress.slice(-8)}
+              <p className="text-xs text-gray-400">
+                {poolAddress.slice(0, 8)}...{poolAddress.slice(-8)}
               </p>
             </div>
 
             {/* Token A Amount */}
             <div className="space-y-2">
-              <Label htmlFor="tokenAAmount" className="flex items-center gap-2">
-                {tokenASymbol} Amount
-                <Info className="w-3 h-3 text-muted-foreground" />
-              </Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="tokenAAmount" className="flex items-center gap-2 text-white">
+                  {tokenASymbol} Amount
+                  <Info className="w-3 h-3 text-gray-400" />
+                </Label>
+                <div className="flex items-center gap-2">
+                  {isLoadingBalances ? (
+                    <span className="text-xs text-gray-400">Loading...</span>
+                  ) : (
+                    <>
+                      <span className="text-xs text-gray-400">
+                        Balance: {tokenABalance.toFixed(6)}
+                      </span>
+                      <button
+                        onClick={setMaxTokenA}
+                        className="text-xs text-primary hover:text-secondary font-semibold"
+                        type="button"
+                      >
+                        MAX
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
               <Input
                 id="tokenAAmount"
                 type="number"
@@ -278,15 +336,43 @@ export function AddLiquidityToPool({
                   }
                 }}
                 disabled={isCalculating}
+                className="bg-[#2a2a3e] border-gray-600 text-white"
               />
             </div>
 
+            {/* Loading indicator between inputs */}
+            {isCalculating && (
+              <div className="flex items-center justify-center py-2">
+                <div className="w-4 h-4 border-2 border-gray-600 border-t-primary rounded-full animate-spin" />
+              </div>
+            )}
+
             {/* Token B Amount */}
             <div className="space-y-2">
-              <Label htmlFor="tokenBAmount" className="flex items-center gap-2">
-                {tokenBSymbol} Amount
-                <Info className="w-3 h-3 text-muted-foreground" />
-              </Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="tokenBAmount" className="flex items-center gap-2 text-white">
+                  {tokenBSymbol} Amount
+                  <Info className="w-3 h-3 text-gray-400" />
+                </Label>
+                <div className="flex items-center gap-2">
+                  {isLoadingBalances ? (
+                    <span className="text-xs text-gray-400">Loading...</span>
+                  ) : (
+                    <>
+                      <span className="text-xs text-gray-400">
+                        Balance: {tokenBBalance.toFixed(6)}
+                      </span>
+                      <button
+                        onClick={setMaxTokenB}
+                        className="text-xs text-primary hover:text-secondary font-semibold"
+                        type="button"
+                      >
+                        MAX
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
               <Input
                 id="tokenBAmount"
                 type="number"
@@ -299,57 +385,30 @@ export function AddLiquidityToPool({
                   }
                 }}
                 disabled={isCalculating}
+                className="bg-[#2a2a3e] border-gray-600 text-white"
               />
             </div>
 
-            {/* Calculating Indicator */}
-            {isCalculating && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-                Calculating optimal amounts...
-              </div>
-            )}
-
-            {/* Estimated Price */}
-            {estimatedPrice !== null && !isCalculating && (
-              <div className="bg-muted/50 rounded-lg p-3">
-                <p className="text-sm font-medium mb-1">Pool Price:</p>
-                <p className="text-lg font-bold text-primary">
-                  1 {tokenASymbol} = {estimatedPrice.toFixed(6)} {tokenBSymbol}
-                </p>
-              </div>
-            )}
-
-            {/* Important Notes */}
+            {/* Important Notice */}
             <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
-              <div className="flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 text-yellow-500 mt-0.5" />
+              <div className="flex gap-3">
+                <AlertTriangle className="w-4 h-4 text-yellow-400 mt-0.5 shrink-0" />
                 <div className="text-xs text-yellow-400">
                   <p className="font-medium mb-1">Important:</p>
                   <ul className="list-disc list-inside space-y-1">
-                    <li>
-                      A new position NFT will be created for you
-                    </li>
-                    <li>
-                      Amounts are adjusted to match pool ratio
-                    </li>
-                    <li>
-                      You'll earn fees proportional to your share
-                    </li>
-                    <li>
-                      Position can be closed anytime to withdraw
-                    </li>
+                    <li>A new position NFT will be created for you</li>
+                    <li>Amounts are adjusted to match pool ratio</li>
+                    <li>You&apos;ll earn fees proportional to your share</li>
+                    <li>Position can be closed anytime to withdraw</li>
                   </ul>
                 </div>
               </div>
             </div>
 
             {/* Cost Info */}
-            <div className="text-xs text-muted-foreground bg-muted/30 p-3 rounded-lg">
-              <p className="font-medium mb-1">Transaction Costs:</p>
-              <p>
-                • Position NFT creation: ~0.02 SOL (refundable when closing)
-              </p>
+            <div className="text-xs text-gray-400 bg-[#2a2a3e] p-3 rounded-lg border border-gray-600">
+              <p className="font-medium mb-1 text-white">Transaction Costs:</p>
+              <p>• Position NFT creation: ~0.02 SOL (refundable when closing)</p>
               <p>• Network fee: ~0.00001 SOL</p>
             </div>
           </div>
@@ -359,8 +418,9 @@ export function AddLiquidityToPool({
               variant="outline"
               onClick={() => setIsOpen(false)}
               disabled={addLiquidityMutation.isPending}
+              className="bg-transparent border-gray-600 text-white hover:bg-gray-800"
             >
-              Cancel
+              CANCEL
             </Button>
             <Button
               onClick={handleAddLiquidity}
@@ -371,6 +431,7 @@ export function AddLiquidityToPool({
                 !tokenBAmount ||
                 isCalculating
               }
+              className="bg-primary hover:bg-secondary text-white"
             >
               {addLiquidityMutation.isPending ? (
                 <div className="flex items-center gap-2">
@@ -380,7 +441,7 @@ export function AddLiquidityToPool({
               ) : (
                 <div className="flex items-center gap-2">
                   <Plus className="w-4 h-4" />
-                  Add Liquidity
+                  + ADD LIQUIDITY
                 </div>
               )}
             </Button>
