@@ -243,7 +243,7 @@ export function TokenCard({ token }: TokenCardProps) {
   }
 
   const playNotificationSound = () => {
-    const audio = new Audio('/notification.mp3')
+    const audio = new Audio('/sound/noti.mp3')
     audio.play().catch(() => {})
   }
 
@@ -255,7 +255,7 @@ export function TokenCard({ token }: TokenCardProps) {
 
   const triggerAlert = (title: string) => {
     const now = Date.now()
-    if (now - lastNotificationRef.current > 3000) {
+    if (now - lastNotificationRef.current > 30) {
       playNotificationSound()
       showBrowserNotification(
         title,
