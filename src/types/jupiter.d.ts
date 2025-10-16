@@ -4,13 +4,20 @@ declare global {
   }
 
   interface Navigator {
-    wallets?: any[];
+    wallets?: WalletAdapter[];
   }
+}
+
+interface WalletAdapter {
+  name: string;
+  url: string;
+  icon: string;
+  readyState: string;
 }
 
 interface JupiterPlugin {
   init: (config: JupiterConfig) => void;
-  syncProps?: (props: any) => void;
+  syncProps?: (props: Record<string, unknown>) => void;
   resume?: () => void;
 }
 
@@ -33,11 +40,11 @@ interface JupiterConfig {
   containerStyles?: React.CSSProperties;
   containerClassName?: string;
   enableWalletPassthrough?: boolean;
-  passthroughWalletContextState?: any;
+  passthroughWalletContextState?: Record<string, unknown>;
   onRequestConnectWallet?: () => void | Promise<void>;
   platformFeeAndAccounts?: {
     feeBps: number;
-    feeAccounts: any;
+    feeAccounts: Record<string, unknown>;
   };
 }
 

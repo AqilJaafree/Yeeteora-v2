@@ -42,7 +42,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           defer
         />
       </head>
-      <body className={`antialiased`}>
+      {/* Add suppressHydrationWarning to body to prevent Grammarly extension conflicts */}
+      <body className="antialiased" suppressHydrationWarning>
         <AppProviders>
           <AppLayout links={links}>{children}</AppLayout>
         </AppProviders>

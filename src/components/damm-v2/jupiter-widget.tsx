@@ -2,8 +2,10 @@
 
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ArrowLeftRight } from 'lucide-react'
+
+// Remove DialogTrigger from imports as it's not used
 
 interface JupiterWidgetProps {
   initialInputMint?: string
@@ -37,36 +39,8 @@ export function JupiterWidget({
     }
   }
 
-  const handleDialogJupiter = () => {
-    setIsOpen(true)
-    
-    // Wait a bit for dialog to render
-    setTimeout(() => {
-      const element = document.getElementById('jupiter-plugin')
-      if (element && window.Jupiter) {
-        try {
-          window.Jupiter.init({
-            displayMode: "integrated",
-            integratedTargetId: "jupiter-plugin",
-            formProps: {
-              initialInputMint,
-              initialOutputMint,
-              swapMode: "ExactIn",
-            },
-          })
-        } catch (error) {
-          console.error('Integrated Jupiter failed:', error)
-          // Fallback to modal
-          setIsOpen(false)
-          handleOpenJupiter()
-        }
-      } else {
-        // Fallback to modal if integrated doesn't work
-        setIsOpen(false)
-        handleOpenJupiter()
-      }
-    }, 300)
-  }
+  // Remove the handleDialogJupiter function entirely as it's not used
+  // const handleDialogJupiter = () => { ... }
 
   return (
     <>

@@ -5,7 +5,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { Button } from '@/components/ui/button'
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'motion/react'
-import { Copy, Users, AlertTriangle, TrendingUp, ArrowLeftRight } from 'lucide-react'
+import { Copy, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { AddLiquidityToPool } from './damm-v2-add-liquidity'
 import { JupiterWidget } from './jupiter-widget'
