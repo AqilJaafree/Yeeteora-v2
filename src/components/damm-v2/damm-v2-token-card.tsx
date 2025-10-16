@@ -5,7 +5,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { Button } from '@/components/ui/button'
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'motion/react'
-import { Copy, AlertTriangle } from 'lucide-react'
+import { Copy, Users, AlertTriangle, TrendingUp } from 'lucide-react'
 import { toast } from 'sonner'
 import { AddLiquidityToPool } from './damm-v2-add-liquidity'
 import { JupiterWidget } from './jupiter-widget'
@@ -26,7 +26,7 @@ export interface TokenData {
   timestamp: number
 }
 
-// Jupiter Token API response type
+// Enhanced Jupiter Token API response type
 interface JupiterTokenData {
   id: string
   name: string
@@ -356,6 +356,8 @@ export function TokenCard({ token }: TokenCardProps) {
     window.open(`https://gmgn.ai/sol/token/${token.mint}`, '_blank')
   }
 
+
+
   const handleCreatePool = () => {
     window.open('https://www.meteora.ag/pools/create', '_blank')
   }
@@ -464,20 +466,46 @@ export function TokenCard({ token }: TokenCardProps) {
                     ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
                     : 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
                 }`}>
-                  {poolExists ? 'Pool Available' : 'No Pool'}
+                  {poolExists ? '✓ Pool Exists' : '⚠️ No Pool'}
                 </span>
               )}
-              
+
               {isLoadingJupiterData && (
-                <span className="px-2 py-1 text-xs rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30 flex items-center gap-1">
-                  <div className="w-2 h-2 border border-blue-400/30 border-t-blue-400 rounded-full animate-spin"></div>
-                  Loading Jupiter...
+                <span className="px-2 py-1 text-xs rounded-full bg-gray-600/50 text-gray-300 inline-flex items-center gap-1">
+                  <div className="w-2 h-2 border border-gray-300 border-t-transparent rounded-full animate-spin"></div>
+                  Loading...
                 </span>
               )}
-              
-              {jupiterDataError && (
+
+              {jupiterTokenData && (
+                <>
+                  <span className={`px-2 py-1 text-xs rounded-full inline-flex items-center gap-1 ${
+                    jupiterTokenData.organicScore >= 70 
+                      ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                      : jupiterTokenData.organicScore >= 40
+                      ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                      : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                  }`}>
+                    {jupiterTokenData.organicScore >= 70 ? (
+                      <TrendingUp className="w-3 h-3" />
+                    ) : jupiterTokenData.organicScore >= 40 ? (
+                      <Users className="w-3 h-3" />
+                    ) : (
+                      <AlertTriangle className="w-3 h-3" />
+                    )}
+                    {jupiterTokenData.organicScore >= 70 ? 'High' : jupiterTokenData.organicScore >= 40 ? 'Medium' : 'Low'}: {jupiterTokenData.organicScore.toFixed(1)}
+                  </span>
+                  <span className="px-2 py-1 text-xs rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                    <Users className="w-3 h-3 inline mr-1" />
+                    {jupiterTokenData.holderCount.toLocaleString()}
+                  </span>
+                </>
+              )}
+
+              {jupiterDataError && !isLoadingJupiterData && (
                 <span 
-                  className="px-2 py-1 text-xs rounded-full bg-red-500/20 text-red-400 border border-red-500/30 cursor-pointer flex items-center gap-1"
+                  className="px-2 py-1 text-xs rounded-full bg-red-500/20 text-red-400 border border-red-500/30 inline-flex items-center gap-1 cursor-pointer hover:bg-red-500/30 transition-colors"
+                  title={jupiterDataError}
                   onClick={() => {
                     toast.error(
                       jupiterDataError.includes('404') ? 'Token not found on Jupiter' :
