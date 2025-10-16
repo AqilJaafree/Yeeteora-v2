@@ -8,6 +8,7 @@ import { motion } from 'motion/react'
 import { Copy, Users, AlertTriangle, TrendingUp } from 'lucide-react'
 import { toast } from 'sonner'
 import { AddLiquidityToPool } from './damm-v2-add-liquidity'
+import { JupiterWidget } from './jupiter-widget'
 
 export interface TokenData {
   mint: string
@@ -25,7 +26,7 @@ export interface TokenData {
   timestamp: number
 }
 
-// Jupiter Token API response type
+// Enhanced Jupiter Token API response type
 interface JupiterTokenData {
   id: string
   name: string
@@ -355,12 +356,7 @@ export function TokenCard({ token }: TokenCardProps) {
     window.open(`https://gmgn.ai/sol/token/${token.mint}`, '_blank')
   }
 
-  const handlePumpSwap = () => {
-    window.open(
-      `https://swap.pump.fun/?input=So11111111111111111111111111111111111111112&output=${token.mint}`,
-      '_blank',
-    )
-  }
+
 
   const handleCreatePool = () => {
     window.open('https://www.meteora.ag/pools/create', '_blank')
@@ -565,9 +561,14 @@ export function TokenCard({ token }: TokenCardProps) {
             <Button className="flex-1 bg-[#4a4a6e] hover:bg-[#5a5a7e] border-none" onClick={handleOpenGMGN}>
               GMGN
             </Button>
-            <Button className="flex-1 bg-[#4a4a6e] hover:bg-[#5a5a7e] border-none" onClick={handlePumpSwap}>
-              SWAP
-            </Button>
+            <JupiterWidget 
+              initialInputMint="So11111111111111111111111111111111111111112" // SOL
+              initialOutputMint={token.mint} // The current token
+            >
+              <Button className="flex-1 bg-[#4a4a6e] hover:bg-[#5a5a7e] border-none w-full">
+                SWAP
+              </Button>
+            </JupiterWidget>
           </div>
           
           <Button 

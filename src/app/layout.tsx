@@ -3,6 +3,7 @@ import './globals.css'
 import { AppProviders } from '@/components/app-providers'
 import React from 'react'
 import { AppLayout } from '@/components/app-layout'
+import Script from "next/script"
 
 export const metadata: Metadata = {
   title: 'Yeeteora - LP Strategies',
@@ -32,7 +33,17 @@ const links: { label: string; path: string }[] = [
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`antialiased`}>
+      <head>
+        {/* Simplified - remove event handlers */}
+        <Script
+          src="https://terminal.jup.ag/main-v4.js"
+          strategy="beforeInteractive"
+          data-preload
+          defer
+        />
+      </head>
+      {/* Add suppressHydrationWarning to body to prevent Grammarly extension conflicts */}
+      <body className="antialiased" suppressHydrationWarning>
         <AppProviders>
           <AppLayout links={links}>{children}</AppLayout>
         </AppProviders>
