@@ -561,14 +561,6 @@ export function TokenCard({ token }: TokenCardProps) {
             <Button className="flex-1 bg-[#4a4a6e] hover:bg-[#5a5a7e] border-none" onClick={handleOpenGMGN}>
               GMGN
             </Button>
-            <JupiterWidget 
-              initialInputMint="So11111111111111111111111111111111111111112" // SOL
-              initialOutputMint={token.mint} // The current token
-            >
-              <Button className="flex-1 bg-[#4a4a6e] hover:bg-[#5a5a7e] border-none w-full">
-                SWAP
-              </Button>
-            </JupiterWidget>
           </div>
           
           <Button 
