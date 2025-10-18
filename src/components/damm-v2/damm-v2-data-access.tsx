@@ -19,10 +19,8 @@ export function useGetDammV2Positions({ address }: { address: PublicKey }) {
       try {
         // TODO: Implement position fetching when SDK method is available
         // For now, return empty array
-        console.log('Position fetching not yet implemented for:', address.toString())
         return []
       } catch (error) {
-        console.error('Error fetching DAMM v2 positions:', error)
         return []
       }
     },
@@ -121,7 +119,6 @@ export function useAddLiquidity({ poolAddress }: { poolAddress: PublicKey }) {
       })
     },
     onError: (error) => {
-      console.error('Add liquidity error:', error)
       toast.error('Failed to add liquidity', {
         description: error instanceof Error ? error.message : 'Unknown error',
       })
@@ -202,7 +199,6 @@ export function useCreatePositionAndAddLiquidity({ poolAddress }: { poolAddress:
       })
     },
     onError: (error) => {
-      console.error('Create position and add liquidity error:', error)
       toast.error('Failed to add liquidity', {
         description: error instanceof Error ? error.message : 'Unknown error',
       })
@@ -259,7 +255,6 @@ export function useRemoveAllLiquidityAndClosePosition({ poolAddress }: { poolAdd
       })
     },
     onError: (error) => {
-      console.error('Close position error:', error)
       toast.error('Failed to close position', {
         description: error instanceof Error ? error.message : 'Unknown error',
       })
@@ -476,7 +471,6 @@ export function useCreateDammV2Pool() {
       })
     },
     onError: (error) => {
-      console.error('Create pool error:', error)
       toast.error('Failed to create pool', {
         description: error instanceof Error ? error.message : 'Unknown error',
       })

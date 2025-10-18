@@ -25,8 +25,14 @@ export interface TokenData {
 
 const EXPIRY_MS = 5 * 60 * 1000
 
-// Get WebSocket URL from environment variable or use default
-const WEBSOCKET_URL = process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'wss://comet.lyt.wtf/ws'
+// Get WebSocket URL from environment variable with secure fallback
+const getWebSocketURL = () => {
+  if (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_WEBSOCKET_URL) {
+    return process.env.NEXT_PUBLIC_WEBSOCKET_URL
+  }
+  // Fallback - should be set in environment variables
+  return process.env.NEXT_PUBLIC_WEBSOCKET_URL || ''
+}
 
 export default function DammV2Feature() {
   const [tokens, setTokens] = useState<Record<string, TokenData>>({})
@@ -66,6 +72,11 @@ export default function DammV2Feature() {
       return
     }
 
+    const wsUrl = getWebSocketURL()
+    if (!wsUrl) {
+      return
+    }
+
     let ws: WebSocket | null = null
     let reconnectTimeout: NodeJS.Timeout | null = null
     let reconnectAttempts = 0
@@ -78,7 +89,7 @@ export default function DammV2Feature() {
           return
         }
 
-        ws = new WebSocket(WEBSOCKET_URL)
+        ws = new WebSocket(wsUrl)
 
         ws.onopen = () => {
           setWsConnected(true)
@@ -110,11 +121,7 @@ export default function DammV2Feature() {
           }
         }
 
-        ws.onerror = (error) => {
-          // Prevent error from propagating to console
-          if (error && typeof error.preventDefault === 'function') {
-            error.preventDefault()
-          }
+        ws.onerror = () => {
           setWsConnected(false)
         }
 
@@ -146,7 +153,7 @@ export default function DammV2Feature() {
       if (ws) {
         ws.close(1000, 'Component unmounting')
       }
-      // Capture timers to avoid stale closure warning
+      // Fix: Capture timers to avoid stale closure warning
       const currentTimers = expiryTimers.current
       Object.values(currentTimers).forEach(clearTimeout)
     }
