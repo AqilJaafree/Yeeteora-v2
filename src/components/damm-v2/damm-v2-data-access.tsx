@@ -20,7 +20,7 @@ export function useGetDammV2Positions({ address }: { address: PublicKey }) {
         // TODO: Implement position fetching when SDK method is available
         // For now, return empty array
         return []
-      } catch (error) {
+      } catch {
         return []
       }
     },
