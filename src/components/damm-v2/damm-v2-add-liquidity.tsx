@@ -1,7 +1,7 @@
 // src/components/damm-v2/damm-v2-add-liquidity.tsx
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useConnection, useWallet } from '@solana/wallet-adapter-react'
 import { PublicKey, Keypair } from '@solana/web3.js'
 import { TOKEN_PROGRAM_ID, getMint } from '@solana/spl-token'
@@ -13,14 +13,12 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from '@/components/ui/dialog'
-import { Plus, Info, AlertTriangle, ArrowLeftRight } from 'lucide-react'
+import { Plus, Info, ArrowLeftRight } from 'lucide-react'
 import { toast } from 'sonner'
 import { CpAmm } from '@meteora-ag/cp-amm-sdk'
 import BN from 'bn.js'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { JupiterWidget } from './jupiter-widget'
 
 interface AddLiquidityToPoolProps {
   poolAddress: string
@@ -53,17 +51,18 @@ export function AddLiquidityToPool({
   const [tokenABalance, setTokenABalance] = useState<number>(0)
   const [tokenBBalance, setTokenBBalance] = useState<number>(0)
   const [isLoadingBalances, setIsLoadingBalances] = useState(false)
+  const [jupiterContainerId, setJupiterContainerId] = useState<string | null>(null)
 
   // Get the non-SOL token mint for Jupiter swap
-  const getSwapTokenMint = () => {
+  const getSwapTokenMint = useCallback(() => {
     const SOL_MINT = 'So11111111111111111111111111111111111111112'
     if (tokenAMint === SOL_MINT) return tokenBMint
     if (tokenBMint === SOL_MINT) return tokenAMint
     return tokenAMint // fallback
-  }
+  }, [tokenAMint, tokenBMint])
 
   // Fetch token balances
-  const fetchBalances = async () => {
+  const fetchBalances = useCallback(async () => {
     if (!publicKey) return
 
     try {
@@ -96,76 +95,73 @@ export function AddLiquidityToPool({
     } finally {
       setIsLoadingBalances(false)
     }
-  }
+  }, [connection, publicKey, tokenAMint, tokenBMint])
 
-  const [jupiterContainerId, setJupiterContainerId] = useState<string | null>(null)
-
+  // Initialize Jupiter widget when swap tab is active
   useEffect(() => {
-    if (activeTab === 'swap' && isOpen) {
-      // Create unique container ID for each Jupiter instance
-      const uniqueId = `jupiter-swap-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-      
-      // Initialize Jupiter when swap tab is active
-      setTimeout(() => {
-        if (typeof window !== "undefined" && window.Jupiter) {
+    if (activeTab === 'swap' && isOpen && typeof window !== 'undefined') {
+      const initJupiter = () => {
+        const container = document.getElementById("jupiter-swap-container")
+        if (container && window.Jupiter) {
           try {
-            // Create new container div
-            const container = document.getElementById("jupiter-swap-container")
-            if (container) {
-              container.innerHTML = `<div id="${uniqueId}" class="w-full h-full"></div>`
-              
-              window.Jupiter.init({
-                displayMode: "integrated",
-                integratedTargetId: uniqueId,
-                formProps: {
-                  initialInputMint: "So11111111111111111111111111111111111111112", // SOL
-                  initialOutputMint: getSwapTokenMint(),
-                  swapMode: "ExactIn",
-                },
-              })
-              
-              setJupiterContainerId(uniqueId)
-            }
+            const uniqueId = `jupiter-${Date.now()}`
+            setJupiterContainerId(uniqueId)
+            
+            window.Jupiter.init({
+              displayMode: "integrated",
+              integratedTargetId: "jupiter-swap-container",
+              formProps: {
+                initialInputMint: "So11111111111111111111111111111111111111112",
+                initialOutputMint: getSwapTokenMint(),
+                swapMode: "ExactIn",
+              },
+              containerStyles: {
+                borderRadius: '8px',
+              },
+              containerClassName: 'w-full h-full',
+              enableWalletPassthrough: true,
+              passthroughWalletContextState: publicKey ? {
+                publicKey: publicKey.toString(),
+                connected: !!publicKey,
+              } : undefined,
+            })
           } catch (error) {
-            console.error('Failed to initialize Jupiter:', error)
+            console.error('Jupiter initialization error:', error)
           }
+        } else {
+          setTimeout(initJupiter, 100)
         }
-      }, 100)
-    } else if (activeTab === 'liquidity') {
-      // Force remove Jupiter container when switching to liquidity tab
-      const container = document.getElementById("jupiter-swap-container")
-      if (container) {
-        container.innerHTML = ""
       }
       
-      // Also try to remove any lingering Jupiter elements
-      const jupiterElements = document.querySelectorAll('[id*="jupiter"]')
-      jupiterElements.forEach(el => {
-        if (el.id !== "jupiter-swap-container") {
-          el.remove()
-        }
-      })
-      
-      setJupiterContainerId(null)
+      setTimeout(initJupiter, 200)
     }
-  }, [activeTab, isOpen]) // Removed jupiterContainerId from dependencies
+  }, [activeTab, isOpen, getSwapTokenMint, publicKey])
 
-  // Cleanup Jupiter when modal closes
+  // Clear Jupiter container when switching to liquidity tab
+  useEffect(() => {
+    if (activeTab === 'liquidity' && isOpen) {
+      const container = document.getElementById("jupiter-swap-container")
+      if (container) {
+        container.style.display = 'none'
+        container.innerHTML = ''
+      }
+      setJupiterContainerId(null)
+    } else if (activeTab === 'swap' && isOpen) {
+      const container = document.getElementById("jupiter-swap-container")
+      if (container) {
+        container.style.display = 'block'
+      }
+    }
+  }, [activeTab, isOpen])
+
+  // Cleanup when modal closes
   useEffect(() => {
     if (!isOpen) {
       const container = document.getElementById("jupiter-swap-container")
       if (container) {
-        container.innerHTML = ""
+        container.innerHTML = ''
+        container.style.display = 'block' // Reset display for next time
       }
-      
-      // Remove any lingering Jupiter elements
-      const jupiterElements = document.querySelectorAll('[id*="jupiter"]')
-      jupiterElements.forEach(el => {
-        if (el.id !== "jupiter-swap-container") {
-          el.remove()
-        }
-      })
-      
       setJupiterContainerId(null)
     }
   }, [isOpen])
@@ -175,7 +171,7 @@ export function AddLiquidityToPool({
     if (isOpen && publicKey) {
       fetchBalances()
     }
-  }, [isOpen, publicKey])
+  }, [isOpen, publicKey, fetchBalances])
 
   const setMaxTokenA = () => {
     if (tokenABalance > 0) {
@@ -215,7 +211,7 @@ export function AddLiquidityToPool({
         )
       )
 
-      // Use getDepositQuote method instead
+      // Use getDepositQuote method
       const quote = await cpAmm.getDepositQuote({
         inAmount: rawAmount,
         isTokenA,
@@ -361,8 +357,8 @@ export function AddLiquidityToPool({
       )}
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent className="sm:max-w-[500px] bg-[#1a1a2e] border-gray-600 text-white">
-          <DialogHeader>
+        <DialogContent className="w-[95vw] max-w-[500px] max-h-[90vh] bg-[#1a1a2e] border-gray-600 text-white p-0 gap-0 overflow-hidden">
+          <DialogHeader className="p-4 pb-2 border-b border-gray-600/30">
             <DialogTitle className="flex items-center gap-2 text-white">
               {tokenASymbol}-{tokenBSymbol}
             </DialogTitle>
@@ -394,160 +390,164 @@ export function AddLiquidityToPool({
             </div>
           </DialogHeader>
 
-          {activeTab === 'liquidity' ? (
-            <div className="space-y-4 py-4">
-              {/* Pool Info - Maintain Original Format */}
-              <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
-                <p className="text-sm font-medium text-blue-400 mb-1">
-                  Pool: {poolName}
-                </p>
-                <p className="text-xs text-gray-400">
-                  {poolAddress.slice(0, 8)}...{poolAddress.slice(-8)}
-                </p>
-              </div>
+          <div className="flex-1 overflow-y-auto">
+            {activeTab === 'liquidity' && (
+              <div className="space-y-4 p-4">
+                {/* Pool Info */}
+                <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
+                  <p className="text-sm font-medium text-blue-400 mb-1">
+                    Pool: {poolName}
+                  </p>
+                  <p className="text-xs text-gray-400">
+                    {poolAddress.slice(0, 8)}...{poolAddress.slice(-8)}
+                  </p>
+                </div>
 
-              {/* Token A Amount */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="tokenAAmount" className="flex items-center gap-2 text-white">
-                    {tokenASymbol} Amount
-                    <Info className="w-3 h-3 text-gray-400" />
-                  </Label>
-                  <div className="flex items-center gap-2">
-                    {isLoadingBalances ? (
-                      <div className="w-4 h-4 border border-gray-400 border-t-transparent rounded-full animate-spin"></div>
-                    ) : (
-                      <span className="text-xs text-gray-400">
-                        Balance: {tokenABalance.toFixed(6)}
-                      </span>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={setMaxTokenA}
-                      className="h-6 px-2 text-xs text-blue-400 hover:text-blue-300"
-                    >
-                      MAX
-                    </Button>
+                {/* Token A Amount */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="tokenAAmount" className="flex items-center gap-2 text-white">
+                      {tokenASymbol} Amount
+                      <Info className="w-3 h-3 text-gray-400" />
+                    </Label>
+                    <div className="flex items-center gap-2">
+                      {isLoadingBalances ? (
+                        <div className="text-xs text-gray-400">Loading...</div>
+                      ) : (
+                        <>
+                          <span className="text-xs text-gray-400">
+                            Balance: {tokenABalance.toFixed(6)}
+                          </span>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={setMaxTokenA}
+                            className="h-6 px-2 text-xs bg-transparent border-gray-600 text-gray-400 hover:bg-gray-800"
+                          >
+                            MAX
+                          </Button>
+                        </>
+                      )}
+                    </div>
                   </div>
+                  <Input
+                    id="tokenAAmount"
+                    type="number"
+                    placeholder="0.0"
+                    value={tokenAAmount}
+                    onChange={(e) => handleTokenAChange(e.target.value)}
+                    className="bg-[#2a2a3e] border-gray-600 text-white"
+                    disabled={isCalculating}
+                  />
                 </div>
-                <Input
-                  id="tokenAAmount"
-                  type="number"
-                  value={tokenAAmount}
-                  onChange={(e) => handleTokenAChange(e.target.value)}
-                  placeholder="0.00"
-                  className="bg-[#2a2a3e] border-gray-600 text-white"
-                  disabled={isCalculating}
-                />
-              </div>
 
-              {/* Token B Amount */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="tokenBAmount" className="flex items-center gap-2 text-white">
-                    {tokenBSymbol} Amount
-                    <Info className="w-3 h-3 text-gray-400" />
-                  </Label>
-                  <div className="flex items-center gap-2">
-                    {isLoadingBalances ? (
-                      <div className="w-4 h-4 border border-gray-400 border-t-transparent rounded-full animate-spin"></div>
-                    ) : (
-                      <span className="text-xs text-gray-400">
-                        Balance: {tokenBBalance.toFixed(6)}
-                      </span>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={setMaxTokenB}
-                      className="h-6 px-2 text-xs text-blue-400 hover:text-blue-300"
-                    >
-                      MAX
-                    </Button>
+                {/* Token B Amount */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="tokenBAmount" className="flex items-center gap-2 text-white">
+                      {tokenBSymbol} Amount
+                      <Info className="w-3 h-3 text-gray-400" />
+                    </Label>
+                    <div className="flex items-center gap-2">
+                      {isLoadingBalances ? (
+                        <div className="text-xs text-gray-400">Loading...</div>
+                      ) : (
+                        <>
+                          <span className="text-xs text-gray-400">
+                            Balance: {tokenBBalance.toFixed(6)}
+                          </span>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={setMaxTokenB}
+                            className="h-6 px-2 text-xs bg-transparent border-gray-600 text-gray-400 hover:bg-gray-800"
+                          >
+                            MAX
+                          </Button>
+                        </>
+                      )}
+                    </div>
                   </div>
-                </div>
-                <Input
-                  id="tokenBAmount"
-                  type="number"
-                  value={tokenBAmount}
-                  onChange={(e) => handleTokenBChange(e.target.value)}
-                  placeholder="0.00"
-                  className="bg-[#2a2a3e] border-gray-600 text-white"
-                  disabled={isCalculating}
-                />
-                {isCalculating && (
-                  <p className="text-xs text-gray-400">Calculating estimated amount...</p>
-                )}
-              </div>
-
-              {/* Important Notice */}
-              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5" />
-                <div className="text-xs text-yellow-400">
-                  <p className="font-medium mb-1">Important:</p>
-                  <ul className="space-y-1">
-                    <li>• A new position NFT will be created for you</li>
-                    <li>• Amounts are adjusted to match pool ratio</li>
-                    <li>• You'll earn fees proportional to your share</li>
-                    <li>• Position can be closed anytime to withdraw</li>
-                  </ul>
+                  <Input
+                    id="tokenBAmount"
+                    type="number"
+                    placeholder="0.0"
+                    value={tokenBAmount}
+                    onChange={(e) => handleTokenBChange(e.target.value)}
+                    className="bg-[#2a2a3e] border-gray-600 text-white"
+                    disabled={isCalculating}
+                  />
+                  {isCalculating && (
+                    <div className="flex items-center gap-2 text-xs text-gray-400">
+                      <div className="w-3 h-3 border border-gray-600 border-t-blue-400 rounded-full animate-spin" />
+                      Calculating estimated amount...
+                    </div>
+                  )}
                 </div>
               </div>
+            )}
 
-              {/* Transaction Costs */}
-              <div className="text-xs text-gray-400 bg-[#2a2a3e] p-3 rounded-lg border border-gray-600">
-                <p className="font-medium mb-1 text-white">Transaction Costs:</p>
-                <p>• Position NFT creation: ~0.02 SOL (refundable when closing)</p>
-                <p>• Network fee: ~0.00001 SOL</p>
+            {activeTab === 'swap' && (
+              <div className="p-4">
+                {/* Mobile-optimized Jupiter Terminal Container */}
+                <div 
+                  id="jupiter-swap-container"
+                  className="w-full h-[500px] max-h-[60vh] rounded-lg overflow-hidden"
+                  style={{
+                    minHeight: '400px',
+                    maxHeight: 'calc(90vh - 200px)'
+                  }}
+                >
+                  {/* Loading state for Jupiter */}
+                  {!jupiterContainerId && (
+                    <div className="flex items-center justify-center h-full bg-[#2a2a3e] rounded-lg">
+                      <div className="text-center">
+                        <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin mx-auto mb-4"></div>
+                        <p className="text-sm text-gray-400">Loading Jupiter Terminal...</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          ) : (
-            // Swap Tab Content
-            <div className="py-4">
-              {/* Jupiter Terminal Container */}
-              <div 
-                id="jupiter-swap-container"
-                className="w-full min-h-[500px] rounded-lg"
-              >
-              </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {activeTab === 'liquidity' && (
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setIsOpen(false)}
-                disabled={addLiquidityMutation.isPending}
-                className="bg-transparent border-gray-600 text-white hover:bg-gray-800"
-              >
-                CANCEL
-              </Button>
-              <Button
-                onClick={handleAddLiquidity}
-                disabled={
-                  addLiquidityMutation.isPending ||
-                  !publicKey ||
-                  !tokenAAmount ||
-                  !tokenBAmount ||
-                  isCalculating
-                }
-                className="bg-primary hover:bg-secondary text-white"
-              >
-                {addLiquidityMutation.isPending ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Adding Liquidity...
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <Plus className="w-4 h-4" />
-                    + ADD LIQUIDITY
-                  </div>
-                )}
-              </Button>
-            </DialogFooter>
+            <div className="border-t border-gray-600/30 p-4">
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setIsOpen(false)}
+                  disabled={addLiquidityMutation.isPending}
+                  className="flex-1 bg-transparent border-gray-600 text-white hover:bg-gray-800"
+                >
+                  CANCEL
+                </Button>
+                <Button
+                  onClick={handleAddLiquidity}
+                  disabled={
+                    addLiquidityMutation.isPending ||
+                    !publicKey ||
+                    !tokenAAmount ||
+                    !tokenBAmount ||
+                    isCalculating
+                  }
+                  className="flex-1 bg-primary hover:bg-secondary text-white"
+                >
+                  {addLiquidityMutation.isPending ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Adding...
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <Plus className="w-4 h-4" />
+                      ADD LIQUIDITY
+                    </div>
+                  )}
+                </Button>
+              </div>
+            </div>
           )}
         </DialogContent>
       </Dialog>

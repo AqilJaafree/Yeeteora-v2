@@ -8,7 +8,6 @@ import { motion } from 'motion/react'
 import { Copy, Users, AlertTriangle, TrendingUp } from 'lucide-react'
 import { toast } from 'sonner'
 import { AddLiquidityToPool } from './damm-v2-add-liquidity'
-import { JupiterWidget } from './jupiter-widget'
 
 export interface TokenData {
   mint: string
@@ -556,35 +555,38 @@ export function TokenCard({ token }: TokenCardProps) {
           </div>
         </CardContent>
 
-        <CardFooter className="flex flex-col gap-2">
-          <div className="flex gap-2 w-full">
-            <Button className="flex-1 bg-[#4a4a6e] hover:bg-[#5a5a7e] border-none" onClick={handleOpenGMGN}>
-              GMGN
-            </Button>
-          </div>
-          
-          <Button 
-            className="w-full bg-primary hover:bg-secondary" 
-            onClick={handleCreatePool}
-          >
-            Create Pool
-          </Button>
-          
-          {poolExists && (
-            <Button 
-              className={`w-full ${getViewPoolButtonStyle()}`} 
-              onClick={handleViewPool}
-              disabled={isCheckingPool || poolExists === null}
-            >
-              {getViewPoolButtonText()}
-            </Button>
-          )}
-          
-          {poolExists === null && isCheckingPool && (
-            <Button className="w-full bg-gray-500 hover:bg-gray-600" disabled>
-              Checking Pool...
-            </Button>
-          )}
+       <CardFooter className="flex flex-col gap-2">
+            <div className="flex gap-2 w-full">
+              <Button className="flex-1 bg-[#4a4a6e] hover:bg-[#5a5a7e] border-none" onClick={handleOpenGMGN}>
+                GMGN
+              </Button>
+            </div>
+            
+            {/* Only show Create Pool button if pool doesn't exist */}
+            {!poolExists && (
+              <Button 
+                className="w-full bg-primary hover:bg-secondary" 
+                onClick={handleCreatePool}
+              >
+                Create Pool
+              </Button>
+            )}
+            
+            {poolExists && (
+              <Button 
+                className={`w-full ${getViewPoolButtonStyle()}`} 
+                onClick={handleViewPool}
+                disabled={isCheckingPool || poolExists === null}
+              >
+                {getViewPoolButtonText()}
+              </Button>
+            )}
+            
+            {poolExists === null && isCheckingPool && (
+              <Button className="w-full bg-gray-500 hover:bg-gray-600" disabled>
+                Checking Pool...
+              </Button>
+            )}
 
           <motion.div
             className="w-full"
