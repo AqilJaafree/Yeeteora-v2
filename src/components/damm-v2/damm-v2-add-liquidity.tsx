@@ -119,11 +119,6 @@ export function AddLiquidityToPool({
                 borderRadius: '8px',
               },
               containerClassName: 'w-full h-full',
-              enableWalletPassthrough: true,
-              passthroughWalletContextState: publicKey ? {
-                publicKey: publicKey.toString(),
-                connected: !!publicKey,
-              } : undefined,
             })
           } catch (error) {
             console.error('Jupiter initialization error:', error)
