@@ -68,22 +68,40 @@ export function AddLiquidityToPool({
     try {
       setIsLoadingBalances(true)
 
-      // Get token accounts
+      const SOL_MINT = 'So11111111111111111111111111111111111111112'
+      let balanceA = 0
+      let balanceB = 0
+
+      // For SOL, use getAccountInfo instead of getBalance (RPC-safe)
+      if (tokenAMint === SOL_MINT || tokenBMint === SOL_MINT) {
+        try {
+          const accountInfo = await connection.getAccountInfo(publicKey)
+          const solBalance = accountInfo ? accountInfo.lamports / 1000000000 : 0
+
+          if (tokenAMint === SOL_MINT) {
+            balanceA = solBalance
+          }
+          if (tokenBMint === SOL_MINT) {
+            balanceB = solBalance
+          }
+        } catch (error) {
+          console.warn('Failed to fetch SOL balance:', error)
+        }
+      }
+
+      // Get SPL token accounts
       const tokenAccounts = await connection.getParsedTokenAccountsByOwner(publicKey, {
         programId: TOKEN_PROGRAM_ID,
       })
-
-      let balanceA = 0
-      let balanceB = 0
 
       tokenAccounts.value.forEach((accountInfo) => {
         const parsedInfo = accountInfo.account.data.parsed.info
         const mintAddress = parsedInfo.mint
 
-        if (mintAddress === tokenAMint) {
+        if (mintAddress === tokenAMint && tokenAMint !== SOL_MINT) {
           balanceA = parsedInfo.tokenAmount.uiAmount || 0
         }
-        if (mintAddress === tokenBMint) {
+        if (mintAddress === tokenBMint && tokenBMint !== SOL_MINT) {
           balanceB = parsedInfo.tokenAmount.uiAmount || 0
         }
       })
@@ -92,10 +110,11 @@ export function AddLiquidityToPool({
       setTokenBBalance(balanceB)
     } catch (error) {
       console.error('Error fetching balances:', error)
+      toast.error('Failed to fetch token balances')
     } finally {
       setIsLoadingBalances(false)
     }
-  }, [connection, publicKey, tokenAMint, tokenBMint])
+  }, [publicKey, connection, tokenAMint, tokenBMint])
 
   // Initialize Jupiter widget when swap tab is active
   useEffect(() => {
@@ -161,11 +180,17 @@ export function AddLiquidityToPool({
     }
   }, [isOpen])
 
-  // Fetch balances when dialog opens
+  // Fetch balances when dialog opens and auto-refresh every 5 seconds
   useEffect(() => {
-    if (isOpen && publicKey) {
+    if (!isOpen || !publicKey) return
+
+    fetchBalances()
+
+    const interval = setInterval(() => {
       fetchBalances()
-    }
+    }, 5000)
+
+    return () => clearInterval(interval)
   }, [isOpen, publicKey, fetchBalances])
 
   const setMaxTokenA = () => {
