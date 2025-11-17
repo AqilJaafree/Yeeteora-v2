@@ -592,8 +592,8 @@ export function LPPositions({ address }: LPPositionsProps) {
   }, []);
 
   // Only run query when mounted and connected
-  const query = useGetLPPositions({ 
-    address: isMounted && connected ? address : new PublicKey('11111111111111111111111111111111111111111')
+  const query = useGetLPPositions({
+    address: isMounted && connected ? address : new PublicKey('11111111111111111111111111111112')
   });
 
   const refreshPositions = () => {

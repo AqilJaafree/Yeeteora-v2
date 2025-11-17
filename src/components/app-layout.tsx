@@ -6,8 +6,6 @@ import { AppHeader } from '@/components/app-header'
 import { AppNavbar } from '@/components/app-navbar'
 import React, { useEffect, useState } from 'react'
 import { AppFooter } from '@/components/app-footer'
-// import { ClusterChecker } from '@/components/cluster/cluster-ui'
-// import { AccountChecker } from '@/components/account/account-ui'
 
 export function AppLayout({
   children,
@@ -43,9 +41,6 @@ export function AppLayout({
       <div className="flex flex-col min-h-screen">
         <AppHeader />
         <main className="flex-grow pb-24">
-          {/* <ClusterChecker>
-            <AccountChecker />
-          </ClusterChecker> */}
           {children}
         </main>
         <AppFooter />

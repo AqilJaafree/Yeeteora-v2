@@ -5,26 +5,252 @@ import { useConnection, useWallet } from '@solana/wallet-adapter-react'
 import { PublicKey, Connection, Keypair } from '@solana/web3.js'
 import { TOKEN_PROGRAM_ID, type Mint } from '@solana/spl-token'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { CpAmm } from '@meteora-ag/cp-amm-sdk'
+import { CpAmm, getSqrtPriceFromPrice, getUnClaimReward } from '@meteora-ag/cp-amm-sdk'
 import { toast } from 'sonner'
 import BN from 'bn.js'
 
-// Get user's DAMM v2 positions (Note: SDK might not have this method, implement if needed)
+// DAMM v2 Position interface
+export interface DammV2Position {
+  positionPubkey: PublicKey
+  poolAddress: PublicKey
+  liquidity: BN
+  tokenAAmount: BN
+  tokenBAmount: BN
+  feeOwedA: BN
+  feeOwedB: BN
+  rewardOne: BN
+  rewardTwo: BN
+  nftMint: PublicKey
+  poolState: {
+    tokenAMint: PublicKey
+    tokenBMint: PublicKey
+    tokenAVault: PublicKey
+    tokenBVault: PublicKey
+    sqrtPrice: BN
+    sqrtMinPrice: BN
+    sqrtMaxPrice: BN
+    currentPrice: number
+    minPrice: number
+    maxPrice: number
+  }
+}
+
+// Get user's DAMM v2 positions using the SDK method
 export function useGetDammV2Positions({ address }: { address: PublicKey }) {
   const { connection } = useConnection()
 
   return useQuery({
     queryKey: ['damm-v2-positions', { endpoint: connection.rpcEndpoint, address: address.toString() }],
-    queryFn: async () => {
+    queryFn: async (): Promise<DammV2Position[]> => {
       try {
-        // TODO: Implement position fetching when SDK method is available
-        // For now, return empty array
-        return []
-      } catch {
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🚀 Starting DAMM v2 position discovery...')
+        }
+
+        // Use custom RPC for heavy operations if available
+        const customRpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL ||
+          process.env.NEXT_PUBLIC_Custom_RPC_URL ||
+          process.env.NEXT_PUBLIC_HEAVY_RPC_URL ||
+          connection.rpcEndpoint
+
+        // Create optimized connection for heavy operations
+        const discoveryConnection = customRpcUrl !== connection.rpcEndpoint
+          ? new Connection(
+              customRpcUrl,
+              {
+                commitment: 'confirmed',
+                confirmTransactionInitialTimeout: 60000,
+              }
+            )
+          : connection
+
+        const cpAmm = new CpAmm(discoveryConnection)
+
+        // Use the SDK's built-in method to get all user positions
+        // This method internally uses getProgramAccounts to find position NFTs
+        const userPositions = await cpAmm.getPositionsByUser(address)
+
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`🎉 DISCOVERY COMPLETE! Found ${userPositions.length} DAMM v2 position(s)`)
+        }
+
+        const positions: DammV2Position[] = []
+
+        // Process each position to fetch additional data
+        for (const userPosition of userPositions) {
+          try {
+            const positionState = userPosition.positionState
+
+            // Fetch pool state
+            const poolState = await cpAmm.fetchPoolState(positionState.pool)
+
+            if (!poolState) {
+              if (process.env.NODE_ENV === 'development') {
+                console.warn(`⚠️ Could not fetch pool state for position ${userPosition.position.toString()}`)
+              }
+              continue
+            }
+
+            // For DAMM v2, we'll use a simpler approach to avoid BigNumber overflow
+            // Store sqrt prices directly and calculate relative price for range checking
+            // We don't need exact decimal prices, just need to know if position is in range
+
+            // Simple range check: compare sqrt prices directly
+            // If sqrtMinPrice < sqrtPrice < sqrtMaxPrice, position is in range
+            const currentPrice = 0 // Placeholder - will be calculated in UI if needed
+            const minPrice = 0 // Placeholder
+            const maxPrice = 0 // Placeholder
+
+            // Calculate token amounts from liquidity using withdraw quote
+            const liquidity = positionState.unlockedLiquidity || new BN(0)
+
+            // Calculate what the position is worth in tokens
+            let tokenAAmount = new BN(0)
+            let tokenBAmount = new BN(0)
+
+            try {
+              if (liquidity.gt(new BN(0))) {
+                const withdrawQuote = cpAmm.getWithdrawQuote({
+                  liquidityDelta: liquidity,
+                  sqrtPrice: poolState.sqrtPrice,
+                  minSqrtPrice: poolState.sqrtMinPrice,
+                  maxSqrtPrice: poolState.sqrtMaxPrice,
+                })
+
+                tokenAAmount = withdrawQuote.outAmountA
+                tokenBAmount = withdrawQuote.outAmountB
+              }
+            } catch (quoteError: unknown) {
+              if (process.env.NODE_ENV === 'development') {
+                console.warn(`⚠️ Could not calculate withdraw quote for position ${userPosition.position.toString()}:`, quoteError)
+              }
+              // Continue with zero amounts if quote calculation fails
+            }
+
+            // Calculate unclaimed fees using SDK function
+            let feeOwedA = new BN(0)
+            let feeOwedB = new BN(0)
+
+            try {
+              const unclaimedReward = getUnClaimReward(poolState, positionState)
+              feeOwedA = unclaimedReward.feeTokenA || new BN(0)
+              feeOwedB = unclaimedReward.feeTokenB || new BN(0)
+
+              if (process.env.NODE_ENV === 'development') {
+                console.log(`💰 Position ${userPosition.position.toString().slice(0, 8)}... unclaimed fees:`)
+                console.log(`   Fee A: ${feeOwedA.toString()}`)
+                console.log(`   Fee B: ${feeOwedB.toString()}`)
+              }
+            } catch (feeError: unknown) {
+              if (process.env.NODE_ENV === 'development') {
+                console.warn(`⚠️ Could not calculate unclaimed fees for position ${userPosition.position.toString()}:`, feeError)
+              }
+              // Continue with zero fees if calculation fails
+            }
+
+            positions.push({
+              positionPubkey: userPosition.position,
+              poolAddress: positionState.pool,
+              liquidity,
+              tokenAAmount,
+              tokenBAmount,
+              feeOwedA,
+              feeOwedB,
+              rewardOne: new BN(0), // Rewards need separate calculation
+              rewardTwo: new BN(0), // Rewards need separate calculation
+              nftMint: userPosition.positionNftAccount, // Use the NFT account from SDK response
+              poolState: {
+                tokenAMint: poolState.tokenAMint,
+                tokenBMint: poolState.tokenBMint,
+                tokenAVault: poolState.tokenAVault,
+                tokenBVault: poolState.tokenBVault,
+                sqrtPrice: poolState.sqrtPrice,
+                sqrtMinPrice: poolState.sqrtMinPrice,
+                sqrtMaxPrice: poolState.sqrtMaxPrice,
+                currentPrice,
+                minPrice,
+                maxPrice,
+              },
+            })
+
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`✅ Processed position ${userPosition.position.toString()}`)
+              console.log(`   Pool: ${positionState.pool.toString()}`)
+              console.log(`   Liquidity: ${liquidity.toString()}`)
+            }
+          } catch (error: unknown) {
+            if (process.env.NODE_ENV === 'development') {
+              console.error(`❌ Error processing position ${userPosition.position.toString()}:`, error)
+            }
+            // Skip this position but continue processing others
+            continue
+          }
+        }
+
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`✅ Successfully processed ${positions.length} DAMM v2 positions`)
+        }
+
+        return positions
+      } catch (error: unknown) {
+        // Enhanced error handling
+        if (process.env.NODE_ENV === 'development') {
+          console.error('❌ DAMM v2 position discovery failed:', error)
+        }
+
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+
+        if (errorMessage.includes('403') || errorMessage.includes('forbidden')) {
+          if (process.env.NODE_ENV === 'development') {
+            console.error('💡 RPC Error Solution:')
+            console.error('   - Your RPC is blocking heavy operations (getProgramAccounts)')
+            console.error('   - Set NEXT_PUBLIC_SOLANA_RPC_URL in your .env.local file')
+            console.error('   - Use a paid RPC provider like Alchemy, QuickNode, or Helius')
+          }
+        } else if (errorMessage.includes('timeout')) {
+          if (process.env.NODE_ENV === 'development') {
+            console.error('💡 Timeout Error Solution:')
+            console.error('   - Position discovery took longer than expected')
+            console.error('   - Try again in a few minutes')
+            console.error('   - Consider using a faster RPC provider')
+          }
+        }
+
+        // Return empty array instead of throwing to prevent UI crashes
         return []
       }
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
+    retry: (failureCount, error: unknown) => {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+
+      // Don't retry certain errors that won't resolve with retries
+      if (errorMessage.includes('403') || errorMessage.includes('forbidden')) {
+        if (process.env.NODE_ENV === 'development') {
+          console.log('❌ Not retrying 403 errors - RPC configuration issue')
+        }
+        return false
+      }
+      if (errorMessage.includes('connection')) {
+        if (process.env.NODE_ENV === 'development') {
+          console.log('❌ Not retrying connection errors - check RPC URL')
+        }
+        return false
+      }
+
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`🔄 Retrying DAMM v2 position discovery... (attempt ${failureCount + 1}/3)`)
+      }
+      return failureCount < 2
+    },
+    retryDelay: (attemptIndex) => {
+      const delay = Math.min(1000 * 2 ** attemptIndex, 30000)
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`⏳ Waiting ${delay}ms before retry...`)
+      }
+      return delay
+    },
+    refetchOnWindowFocus: false, // Don't refetch on window focus to avoid excessive API calls
     enabled: !!address,
   })
 }
@@ -316,31 +542,20 @@ export function useCreateDammV2Pool() {
 
       const cpAmm = new CpAmm(connection)
 
-      // Helper: Calculate sqrt price from regular price
-      const getSqrtPriceFromPrice = (
-        price: number,
-        tokenADec: number,
-        tokenBDec: number
-      ): BN => {
-        const decimalDiff = tokenBDec - tokenADec
-        const adjustedPrice = price * Math.pow(10, decimalDiff)
-        const sqrtPrice = Math.sqrt(adjustedPrice)
-        return new BN(Math.floor(sqrtPrice * Math.pow(2, 64)))
-      }
-
-      // Calculate sqrt prices
+      // Calculate sqrt prices using SDK helper function
+      // getSqrtPriceFromPrice accepts price as string and properly handles Q64.64 conversion
       const sqrtPrice = getSqrtPriceFromPrice(
-        input.initPrice,
+        input.initPrice.toString(),
         input.tokenADecimal,
         input.tokenBDecimal
       )
       const sqrtMinPrice = getSqrtPriceFromPrice(
-        input.minPrice,
+        input.minPrice.toString(),
         input.tokenADecimal,
         input.tokenBDecimal
       )
       const sqrtMaxPrice = getSqrtPriceFromPrice(
-        input.maxPrice,
+        input.maxPrice.toString(),
         input.tokenADecimal,
         input.tokenBDecimal
       )

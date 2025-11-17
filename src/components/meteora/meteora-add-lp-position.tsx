@@ -41,7 +41,7 @@ export function AddLPPosition({ pairAddress, pairName, isSOLPair }: AddLPPositio
   // const [showNotesInfo, setShowNotesInfo] = useState(false)
 
   // Get wallet balance
-  const balanceQuery = useGetBalance({ address: publicKey || new PublicKey('11111111111111111111111111111111') })
+  const balanceQuery = useGetBalance({ address: publicKey || new PublicKey('11111111111111111111111111111112') })
   const walletBalanceSOL = balanceQuery.data && publicKey ? balanceQuery.data / LAMPORTS_PER_SOL : 0
 
   // Function to set percentage of wallet balance
