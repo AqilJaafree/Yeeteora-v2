@@ -8,6 +8,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { CpAmm, getSqrtPriceFromPrice, getUnClaimReward } from '@meteora-ag/cp-amm-sdk'
 import { toast } from 'sonner'
 import BN from 'bn.js'
+import { DammV2PositionStorage } from './damm-v2-storage'
+import { getTokenPriceUSD } from './damm-v2-price-utils'
+import type { PositionEntryRecord, PositionExitRecord } from './damm-v2-pnl-types'
 
 // DAMM v2 Position interface
 export interface DammV2Position {
@@ -372,6 +375,15 @@ export function useCreatePositionAndAddLiquidity({ poolAddress }: { poolAddress:
       const cpAmm = new CpAmm(connection)
       const poolState = await cpAmm.fetchPoolState(poolAddress)
 
+      // Fetch token mint info for decimals
+      const [tokenAMintInfo, tokenBMintInfo] = await Promise.all([
+        connection.getParsedAccountInfo(poolState.tokenAMint),
+        connection.getParsedAccountInfo(poolState.tokenBMint),
+      ])
+
+      const tokenADecimals = (tokenAMintInfo.value?.data as { parsed: { info: { decimals: number } } })?.parsed?.info?.decimals || 9
+      const tokenBDecimals = (tokenBMintInfo.value?.data as { parsed: { info: { decimals: number } } })?.parsed?.info?.decimals || 9
+
       // Calculate liquidity delta
       const liquidityDelta = cpAmm.getLiquidityDelta({
         maxAmountTokenA: input.tokenAAmount,
@@ -406,9 +418,19 @@ export function useCreatePositionAndAddLiquidity({ poolAddress }: { poolAddress:
 
       await connection.confirmTransaction(signature, 'confirmed')
 
-      return { signature, position: positionNft.publicKey }
+      return {
+        signature,
+        position: positionNft.publicKey,
+        poolState,
+        tokenAAmount: input.tokenAAmount,
+        tokenBAmount: input.tokenBAmount,
+        tokenADecimals,
+        tokenBDecimals,
+      }
     },
-    onSuccess: async ({ signature, position }) => {
+    onSuccess: async (result) => {
+      const { signature, position, poolState, tokenAAmount, tokenBAmount, tokenADecimals, tokenBDecimals } = result
+
       toast.success('Position created and liquidity added!', {
         description: `Position: ${position.toString().slice(0, 8)}...${position.toString().slice(-8)}`,
         action: {
@@ -416,7 +438,23 @@ export function useCreatePositionAndAddLiquidity({ poolAddress }: { poolAddress:
           onClick: () => window.open(`https://solscan.io/tx/${signature}`, '_blank'),
         },
       })
-      
+
+      // Record position entry for P&L tracking (async, non-blocking)
+      recordPositionEntry({
+        positionAddress: position,
+        poolAddress,
+        tokenAMint: poolState.tokenAMint,
+        tokenBMint: poolState.tokenBMint,
+        tokenAAmount,
+        tokenBAmount,
+        tokenADecimal: tokenADecimals,
+        tokenBDecimal: tokenBDecimals,
+        transactionSignature: signature,
+        connection,
+      }).catch((error) => {
+        console.error('[P&L Tracking] Failed to record position entry:', error)
+      })
+
       await client.invalidateQueries({
         queryKey: ['damm-v2-positions'],
       })
@@ -450,6 +488,28 @@ export function useRemoveAllLiquidityAndClosePosition({ poolAddress }: { poolAdd
       const poolState = await cpAmm.fetchPoolState(poolAddress)
       const positionState = await cpAmm.fetchPositionState(input.positionAddress)
 
+      // Get withdraw quote to know final amounts
+      const withdrawQuote = cpAmm.getWithdrawQuote({
+        liquidityDelta: positionState.unlockedLiquidity || new BN(0),
+        sqrtPrice: poolState.sqrtPrice,
+        minSqrtPrice: poolState.sqrtMinPrice,
+        maxSqrtPrice: poolState.sqrtMaxPrice,
+      })
+
+      // Get unclaimed fees
+      const unclaimedReward = getUnClaimReward(poolState, positionState)
+      const totalFeesA = unclaimedReward.feeTokenA || new BN(0)
+      const totalFeesB = unclaimedReward.feeTokenB || new BN(0)
+
+      // Fetch token decimals
+      const [tokenAMintInfo, tokenBMintInfo] = await Promise.all([
+        connection.getParsedAccountInfo(poolState.tokenAMint),
+        connection.getParsedAccountInfo(poolState.tokenBMint),
+      ])
+
+      const tokenADecimals = (tokenAMintInfo.value?.data as { parsed: { info: { decimals: number } } })?.parsed?.info?.decimals || 9
+      const tokenBDecimals = (tokenBMintInfo.value?.data as { parsed: { info: { decimals: number } } })?.parsed?.info?.decimals || 9
+
       const closeTx = await cpAmm.removeAllLiquidityAndClosePosition({
         owner: publicKey,
         position: input.positionAddress,
@@ -465,9 +525,22 @@ export function useRemoveAllLiquidityAndClosePosition({ poolAddress }: { poolAdd
       const signature = await sendTransaction(closeTx, connection)
 
       await connection.confirmTransaction(signature, 'confirmed')
-      return signature
+
+      return {
+        signature,
+        positionAddress: input.positionAddress,
+        poolState,
+        finalTokenAAmount: withdrawQuote.outAmountA,
+        finalTokenBAmount: withdrawQuote.outAmountB,
+        totalFeesA,
+        totalFeesB,
+        tokenADecimals,
+        tokenBDecimals,
+      }
     },
-    onSuccess: async (signature) => {
+    onSuccess: async (result) => {
+      const { signature, positionAddress, poolState, finalTokenAAmount, finalTokenBAmount, totalFeesA, totalFeesB, tokenADecimals, tokenBDecimals } = result
+
       toast.success('Position closed successfully!', {
         description: `Transaction: ${signature.slice(0, 8)}...${signature.slice(-8)}`,
         action: {
@@ -475,7 +548,24 @@ export function useRemoveAllLiquidityAndClosePosition({ poolAddress }: { poolAdd
           onClick: () => window.open(`https://solscan.io/tx/${signature}`, '_blank'),
         },
       })
-      
+
+      // Record position exit for P&L tracking (async, non-blocking)
+      recordPositionExit({
+        positionAddress,
+        poolAddress,
+        finalTokenAAmount,
+        finalTokenBAmount,
+        totalFeesA,
+        totalFeesB,
+        tokenADecimal: tokenADecimals,
+        tokenBDecimal: tokenBDecimals,
+        tokenAMint: poolState.tokenAMint,
+        tokenBMint: poolState.tokenBMint,
+        transactionSignature: signature,
+      }).catch((error) => {
+        console.error('[P&L Tracking] Failed to record position exit:', error)
+      })
+
       await client.invalidateQueries({
         queryKey: ['damm-v2-positions'],
       })
@@ -491,6 +581,152 @@ export function useRemoveAllLiquidityAndClosePosition({ poolAddress }: { poolAdd
 // Helper to get CpAmm instance
 export function getCpAmmInstance(connection: Connection) {
   return new CpAmm(connection)
+}
+
+/**
+ * Helper function to record position entry for P&L tracking
+ * Fetches token prices and saves entry data to localStorage
+ */
+async function recordPositionEntry(params: {
+  positionAddress: PublicKey
+  poolAddress: PublicKey
+  tokenAMint: PublicKey
+  tokenBMint: PublicKey
+  tokenAAmount: BN
+  tokenBAmount: BN
+  tokenADecimal: number
+  tokenBDecimal: number
+  transactionSignature: string
+  connection: Connection
+}): Promise<void> {
+  try {
+    // Fetch current token prices from Jupiter
+    const [tokenAPrice, tokenBPrice] = await Promise.all([
+      getTokenPriceUSD(params.tokenAMint.toBase58()),
+      getTokenPriceUSD(params.tokenBMint.toBase58()),
+    ])
+
+    // Convert amounts to decimal numbers
+    const tokenAAmountDecimal = params.tokenAAmount.toNumber() / Math.pow(10, params.tokenADecimal)
+    const tokenBAmountDecimal = params.tokenBAmount.toNumber() / Math.pow(10, params.tokenBDecimal)
+
+    // Calculate initial value in USD
+    const initialValueUSD = (tokenAAmountDecimal * tokenAPrice) + (tokenBAmountDecimal * tokenBPrice)
+
+    // Calculate pool price (token B per token A)
+    const entryPoolPrice = tokenAPrice > 0 ? tokenBPrice / tokenAPrice : 0
+
+    // Create entry record
+    const entry: PositionEntryRecord = {
+      positionAddress: params.positionAddress.toBase58(),
+      poolAddress: params.poolAddress.toBase58(),
+      entryTimestamp: Date.now(),
+      tokenAMint: params.tokenAMint.toBase58(),
+      tokenBMint: params.tokenBMint.toBase58(),
+      initialTokenAAmount: params.tokenAAmount.toString(),
+      initialTokenBAmount: params.tokenBAmount.toString(),
+      entryTokenAPrice: tokenAPrice,
+      entryTokenBPrice: tokenBPrice,
+      entryPoolPrice,
+      initialValueUSD,
+      decimalsA: params.tokenADecimal,
+      decimalsB: params.tokenBDecimal,
+      transactionSignature: params.transactionSignature,
+    }
+
+    // Save to localStorage
+    DammV2PositionStorage.savePositionEntry(entry)
+
+    console.log(`[P&L Tracking] Position entry recorded:`, {
+      position: params.positionAddress.toBase58().slice(0, 8),
+      initialValue: `$${initialValueUSD.toFixed(2)}`,
+      tokenAPrice: `$${tokenAPrice.toFixed(4)}`,
+      tokenBPrice: `$${tokenBPrice.toFixed(4)}`,
+    })
+  } catch (error) {
+    console.error('[P&L Tracking] Failed to record position entry:', error)
+    // Don't throw - we don't want to fail the transaction if tracking fails
+  }
+}
+
+/**
+ * Helper function to record position exit for P&L tracking
+ * Calculates realized P&L and saves exit data to localStorage
+ */
+async function recordPositionExit(params: {
+  positionAddress: PublicKey
+  poolAddress: PublicKey
+  finalTokenAAmount: BN
+  finalTokenBAmount: BN
+  totalFeesA: BN
+  totalFeesB: BN
+  tokenADecimal: number
+  tokenBDecimal: number
+  tokenAMint: PublicKey
+  tokenBMint: PublicKey
+  transactionSignature: string
+}): Promise<void> {
+  try {
+    // Get entry record
+    const entry = DammV2PositionStorage.getEntry(params.positionAddress.toBase58())
+    if (!entry) {
+      console.warn('[P&L Tracking] No entry record found for position exit')
+      return
+    }
+
+    // Fetch current token prices
+    const [tokenAPrice, tokenBPrice] = await Promise.all([
+      getTokenPriceUSD(params.tokenAMint.toBase58()),
+      getTokenPriceUSD(params.tokenBMint.toBase58()),
+    ])
+
+    // Convert amounts to decimal
+    const finalTokenADecimal = params.finalTokenAAmount.toNumber() / Math.pow(10, params.tokenADecimal)
+    const finalTokenBDecimal = params.finalTokenBAmount.toNumber() / Math.pow(10, params.tokenBDecimal)
+    const feesADecimal = params.totalFeesA.toNumber() / Math.pow(10, params.tokenADecimal)
+    const feesBDecimal = params.totalFeesB.toNumber() / Math.pow(10, params.tokenBDecimal)
+
+    // Calculate exit values
+    const finalValueUSD = (finalTokenADecimal * tokenAPrice) + (finalTokenBDecimal * tokenBPrice)
+    const totalFeesValueUSD = (feesADecimal * tokenAPrice) + (feesBDecimal * tokenBPrice)
+    const exitPoolPrice = tokenAPrice > 0 ? tokenBPrice / tokenAPrice : 0
+
+    // Calculate realized P&L
+    const realizedPnL = (finalValueUSD + totalFeesValueUSD) - entry.initialValueUSD
+    const realizedPnLPercentage = entry.initialValueUSD > 0
+      ? (realizedPnL / entry.initialValueUSD) * 100
+      : 0
+
+    // Create exit record
+    const exit: PositionExitRecord = {
+      positionAddress: params.positionAddress.toBase58(),
+      poolAddress: params.poolAddress.toBase58(),
+      exitTimestamp: Date.now(),
+      finalTokenAAmount: params.finalTokenAAmount.toString(),
+      finalTokenBAmount: params.finalTokenBAmount.toString(),
+      exitTokenAPrice: tokenAPrice,
+      exitTokenBPrice: tokenBPrice,
+      exitPoolPrice,
+      finalValueUSD,
+      totalFeesCollectedA: params.totalFeesA.toString(),
+      totalFeesCollectedB: params.totalFeesB.toString(),
+      totalFeesValueUSD,
+      realizedPnL,
+      realizedPnLPercentage,
+      transactionSignature: params.transactionSignature,
+    }
+
+    // Save to localStorage
+    DammV2PositionStorage.savePositionExit(exit)
+
+    console.log(`[P&L Tracking] Position exit recorded:`, {
+      position: params.positionAddress.toBase58().slice(0, 8),
+      realizedPnL: `${realizedPnL >= 0 ? '+' : ''}$${realizedPnL.toFixed(2)}`,
+      realizedPnLPercentage: `${realizedPnLPercentage >= 0 ? '+' : ''}${realizedPnLPercentage.toFixed(2)}%`,
+    })
+  } catch (error) {
+    console.error('[P&L Tracking] Failed to record position exit:', error)
+  }
 }
 
 // Create custom pool with dynamic config
