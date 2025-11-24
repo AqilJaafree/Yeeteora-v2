@@ -143,10 +143,6 @@ type FilterStrategy = keyof typeof filterStrategies | 'all'
 
 // LP Pair Card Component
 function LPPairCard({ pair}: { pair: DLMMPair; rank: number }) {
-// function LPPairCard({ pair, rank }: { pair: DLMMPair; rank: number }) {
-  // Console log the COMPLETE pool data as JSON for easy copying
-  // console.log(`Pool ${rank} - ${pair.name} - FULL JSON:`)
-  // console.log(JSON.stringify(pair, null, 2))
 
   const isSOLPair = (pair: DLMMPair): boolean => {
     const SOL_MINT = 'So11111111111111111111111111111111111111112'
@@ -177,18 +173,6 @@ function LPPairCard({ pair}: { pair: DLMMPair; rank: number }) {
     if (num >= 1e3) return `$${(num / 1e3).toFixed(2)}K`
     return `$${num.toFixed(2)}`
   }
-
-  // const formatPercentage = (num?: number) => {
-  //   if (num === undefined || num === null) return 'N/A'
-  //   return `${num > 0 ? '+' : ''}${num.toFixed(2)}%`
-  // }
-
-  // const getRankColor = (rank: number) => {
-  //   if (rank === 1) return 'text-yellow-400'
-  //   if (rank <= 3) return 'text-orange-400'
-  //   if (rank <= 10) return 'text-primary'
-  //   return 'text-muted-foreground'
-  // }
 
   return (
     <>
@@ -242,7 +226,8 @@ function LPPairCard({ pair}: { pair: DLMMPair; rank: number }) {
           </div>
 
           {/* Bin Step Column */}
-          <div className="flex items-center justify-center">
+          <div className="flex items-ce
+nter justify-center">
             <div className="text-white font-medium font-serif text-sm">{pair.bin_step || 'N/A'}</div>
           </div>
 
@@ -473,7 +458,6 @@ export function MeteoraStrategyFilter() {
             <Button
               variant={activeFilter === 'all' ? 'default' : 'outline'}
               onClick={() => {
-                // console.log('Clicking All Strategies, current filter:', activeFilter)
                 setActiveFilter('all')
               }}
             >
@@ -484,7 +468,6 @@ export function MeteoraStrategyFilter() {
             <Button
               variant={activeFilter === 'oneSided' ? 'default' : 'outline'}
               onClick={() => {
-                // console.log('Clicking One Sided, current filter:', activeFilter)
                 setActiveFilter('oneSided')
               }}
             >

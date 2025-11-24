@@ -1,10 +1,10 @@
 // src/components/damm-v2/damm-v2-add-liquidity.tsx
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useConnection, useWallet } from '@solana/wallet-adapter-react'
-import { PublicKey, Keypair } from '@solana/web3.js'
-import { TOKEN_PROGRAM_ID, getMint } from '@solana/spl-token'
+import { PublicKey, Keypair, Transaction } from '@solana/web3.js'
+import { TOKEN_PROGRAM_ID } from '@solana/spl-token'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -19,6 +19,17 @@ import { toast } from 'sonner'
 import { CpAmm } from '@meteora-ag/cp-amm-sdk'
 import BN from 'bn.js'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+
+// Phantom Provider type definition
+interface PhantomProvider {
+  isPhantom?: boolean
+  publicKey: PublicKey
+  signAndSendTransaction: (transaction: Transaction) => Promise<{ signature: string }>
+  signTransaction: (transaction: Transaction) => Promise<Transaction>
+  signAllTransactions: (transactions: Transaction[]) => Promise<Transaction[]>
+  connect: () => Promise<{ publicKey: PublicKey }>
+  disconnect: () => Promise<void>
+}
 
 interface AddLiquidityToPoolProps {
   poolAddress: string
@@ -40,11 +51,12 @@ export function AddLiquidityToPool({
   children,
 }: AddLiquidityToPoolProps) {
   const { connection } = useConnection()
-  const { publicKey, sendTransaction } = useWallet()
+  const { publicKey, sendTransaction, wallet } = useWallet()
   const client = useQueryClient()
   
   const [isOpen, setIsOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState<'liquidity' | 'swap'>('liquidity')
+ 
+ const [activeTab, setActiveTab] = useState<'liquidity' | 'swap'>('liquidity')
   const [tokenAAmount, setTokenAAmount] = useState('')
   const [tokenBAmount, setTokenBAmount] = useState('')
   const [isCalculating, setIsCalculating] = useState(false)
@@ -52,6 +64,9 @@ export function AddLiquidityToPool({
   const [tokenBBalance, setTokenBBalance] = useState<number>(0)
   const [isLoadingBalances, setIsLoadingBalances] = useState(false)
   const [jupiterContainerId, setJupiterContainerId] = useState<string | null>(null)
+
+  // Debounce timer ref to prevent excessive RPC calls during typing
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   // Get the non-SOL token mint for Jupiter swap
   const getSwapTokenMint = useCallback(() => {
@@ -66,7 +81,8 @@ export function AddLiquidityToPool({
     if (!publicKey) return
 
     try {
-      setIsLoadingBalances(true)
+ 
+     setIsLoadingBalances(true)
 
       const SOL_MINT = 'So11111111111111111111111111111111111111112'
       let balanceA = 0
@@ -85,16 +101,38 @@ export function AddLiquidityToPool({
             balanceB = solBalance
           }
         } catch (error) {
-          console.warn('Failed to fetch SOL balance:', error)
+          console.error('[Balance Fetch] Failed to fetch SOL balance:', error)
         }
       }
 
-      // Get SPL token accounts
-      const tokenAccounts = await connection.getParsedTokenAccountsByOwner(publicKey, {
-        programId: TOKEN_PROGRAM_ID,
+      // Get SPL token accounts from BOTH Token Program and Token-2022 Program
+      // FIX: Check both programs to ensure we find all tokens
+      const TOKEN_2022_PROGRAM_ID = new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb')
+
+      const [tokenAccounts, token2022Accounts] = await Promise.all([
+        connection.getParsedTokenAccountsByOwner(publicKey, {
+          programId: TOKEN_PROGRAM_ID,
+        }),
+        connection.getParsedTokenAccountsByOwner(publicKey, {
+          programId: TOKEN_2022_PROGRAM_ID,
+        }).catch(() => ({ value: [] })) // Gracefully handle if Token-2022 not supported
+      ])
+
+      // Check standard Token Program accounts
+      tokenAccounts.value.forEach((accountInfo) => {
+        const parsedInfo = accountInfo.account.data.parsed.info
+        const mintAddress = parsedInfo.mint
+
+        if (mintAddress === tokenAMint && tokenAMint !== SOL_MINT) {
+          balanceA = parsedInfo.tokenAmount.uiAmount || 0
+        }
+        if (mintAddress === tokenBMint && tokenBMint !== SOL_MINT) {
+          balanceB = parsedInfo.tokenAmount.uiAmount || 0
+        }
       })
 
-      tokenAccounts.value.forEach((accountInfo) => {
+      // Check Token-2022 Program accounts
+      token2022Accounts.value.forEach((accountInfo) => {
         const parsedInfo = accountInfo.account.data.parsed.info
         const mintAddress = parsedInfo.mint
 
@@ -177,6 +215,12 @@ export function AddLiquidityToPool({
         container.style.display = 'block' // Reset display for next time
       }
       setJupiterContainerId(null)
+
+      // Clear debounce timer when dialog closes
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current)
+        debounceTimerRef.current = null
+      }
     }
   }, [isOpen])
 
@@ -192,6 +236,15 @@ export function AddLiquidityToPool({
 
     return () => clearInterval(interval)
   }, [isOpen, publicKey, fetchBalances])
+
+  // Cleanup debounce timer on component unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current)
+      }
+    }
+  }, [])
 
   const setMaxTokenA = () => {
     if (tokenABalance > 0) {
@@ -222,12 +275,32 @@ export function AddLiquidityToPool({
       const cpAmm = new CpAmm(connection)
       const poolState = await cpAmm.fetchPoolState(new PublicKey(poolAddress))
 
-      const tokenAMintInfo = await getMint(connection, new PublicKey(tokenAMint))
-      const tokenBMintInfo = await getMint(connection, new PublicKey(tokenBMint))
+      // FIX: Fetch token decimals safely using getParsedAccountInfo instead of getMint
+      // This works for both Token Program and Token-2022 Program
+      let tokenADecimals = 9 // Default fallback
+      let tokenBDecimals = 9 // Default fallback
+
+      try {
+        const [tokenAAccountInfo, tokenBAccountInfo] = await Promise.all([
+          connection.getParsedAccountInfo(new PublicKey(tokenAMint)),
+          connection.getParsedAccountInfo(new PublicKey(tokenBMint)),
+        ])
+
+        // Extract decimals from parsed account data
+        if (tokenAAccountInfo.value?.data && 'parsed' in tokenAAccountInfo.value.data) {
+          tokenADecimals = tokenAAccountInfo.value.data.parsed.info.decimals
+        }
+        if (tokenBAccountInfo.value?.data && 'parsed' in tokenBAccountInfo.value.data) {
+          tokenBDecimals = tokenBAccountInfo.value.data.parsed.info.decimals
+        }
+      } catch (mintError) {
+        console.error('[Token Decimals] Could not fetch mint decimals, using defaults:', mintError)
+        // Use default decimals (9) if fetching fails
+      }
 
       const rawAmount = new BN(
         Math.floor(
-          parseFloat(amount) * Math.pow(10, isTokenA ? tokenAMintInfo.decimals : tokenBMintInfo.decimals)
+          parseFloat(amount) * Math.pow(10, isTokenA ? tokenADecimals : tokenBDecimals)
         )
       )
 
@@ -240,8 +313,8 @@ export function AddLiquidityToPool({
         sqrtPrice: poolState.sqrtPrice,
       })
 
-      const otherAmount = parseFloat(quote.outputAmount.toString()) / 
-        Math.pow(10, isTokenA ? tokenBMintInfo.decimals : tokenAMintInfo.decimals)
+      const otherAmount = parseFloat(quote.outputAmount.toString()) /
+        Math.pow(10, isTokenA ? tokenBDecimals : tokenADecimals)
 
       if (isTokenA) {
         setTokenBAmount(otherAmount.toFixed(6))
@@ -250,7 +323,12 @@ export function AddLiquidityToPool({
       }
     } catch (error) {
       console.error('Error calculating amount:', error)
-      toast.error('Failed to calculate estimated amount')
+      // Only show error toast for critical errors, not for calculation issues
+      if (error instanceof Error && !error.message.includes('decimals')) {
+        toast.error('Failed to calculate estimated amount', {
+          description: 'Please try entering the amount manually'
+        })
+      }
     } finally {
       setIsCalculating(false)
     }
@@ -258,8 +336,17 @@ export function AddLiquidityToPool({
 
   const handleTokenAChange = (value: string) => {
     setTokenAAmount(value)
+
+    // Clear previous debounce timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current)
+    }
+
     if (value && value !== '0') {
-      calculateEstimatedAmount(value, true)
+      // Debounce calculation by 500ms to prevent excessive RPC calls during typing
+      debounceTimerRef.current = setTimeout(() => {
+        calculateEstimatedAmount(value, true)
+      }, 500)
     } else {
       setTokenBAmount('')
     }
@@ -267,8 +354,17 @@ export function AddLiquidityToPool({
 
   const handleTokenBChange = (value: string) => {
     setTokenBAmount(value)
+
+    // Clear previous debounce timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current)
+    }
+
     if (value && value !== '0') {
-      calculateEstimatedAmount(value, false)
+      // Debounce calculation by 500ms to prevent excessive RPC calls during typing
+      debounceTimerRef.current = setTimeout(() => {
+        calculateEstimatedAmount(value, false)
+      }, 500)
     } else {
       setTokenAAmount('')
     }
@@ -297,6 +393,39 @@ export function AddLiquidityToPool({
 
       const positionNft = Keypair.generate()
 
+      // CRITICAL: Detect which token program each token uses (Token Program vs Token-2022)
+      // This prevents "IncorrectProgramId" errors when tokens use different programs
+      const TOKEN_2022_PROGRAM_ID = new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb')
+
+      // Fetch token account info to determine the correct program
+      const [tokenAAccountInfo, tokenBAccountInfo] = await Promise.all([
+        connection.getParsedAccountInfo(poolState.tokenAMint),
+        connection.getParsedAccountInfo(poolState.tokenBMint),
+      ])
+
+      // SECURITY: Validate account info exists before proceeding
+      if (!tokenAAccountInfo.value || !tokenBAccountInfo.value) {
+        throw new Error('Failed to fetch token mint information. The token may not exist or the RPC endpoint may be unavailable.')
+      }
+
+      // Determine which program owns each token
+      const tokenAProgram = tokenAAccountInfo.value.owner.equals(TOKEN_2022_PROGRAM_ID)
+        ? TOKEN_2022_PROGRAM_ID
+        : TOKEN_PROGRAM_ID
+
+      const tokenBProgram = tokenBAccountInfo.value.owner.equals(TOKEN_2022_PROGRAM_ID)
+        ? TOKEN_2022_PROGRAM_ID
+        : TOKEN_PROGRAM_ID
+
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Token Programs]', {
+          tokenA: poolState.tokenAMint.toBase58().slice(0, 8) + '...',
+          tokenAProgram: tokenAProgram.toBase58(),
+          tokenB: poolState.tokenBMint.toBase58().slice(0, 8) + '...',
+          tokenBProgram: tokenBProgram.toBase58(),
+        })
+      }
+
       const tx = await cpAmm.createPositionAndAddLiquidity({
         owner: publicKey,
         pool: new PublicKey(poolAddress),
@@ -308,15 +437,65 @@ export function AddLiquidityToPool({
         tokenBAmountThreshold: input.tokenBAmount,
         tokenAMint: poolState.tokenAMint,
         tokenBMint: poolState.tokenBMint,
-        tokenAProgram: TOKEN_PROGRAM_ID,
-        tokenBProgram: TOKEN_PROGRAM_ID,
+        tokenAProgram,  // Now uses the correct detected program
+        tokenBProgram,  // Now uses the correct detected program
       })
 
-      const signature = await sendTransaction(tx, connection, {
-        signers: [positionNft],
-      })
+      // SECURITY FIX: Use Phantom's native signAndSendTransaction for better security
+      // BUT only if the user is actually connected with Phantom wallet
+      let signature: string
 
-      await connection.confirmTransaction(signature, 'confirmed')
+      // Check if user is connected with Phantom wallet (not just if Phantom is installed)
+      const isConnectedWithPhantom = wallet?.adapter?.name === 'Phantom'
+
+      if (isConnectedWithPhantom) {
+        const provider = (window as Window & { phantom?: { solana?: PhantomProvider } }).phantom?.solana
+
+        if (!provider) {
+          throw new Error('Phantom provider not found')
+        }
+
+        // CRITICAL FIX: Fetch and set recentBlockhash before signing
+        // SDK-generated transactions don't include blockhash
+        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed')
+        tx.recentBlockhash = blockhash
+        tx.lastValidBlockHeight = lastValidBlockHeight
+        tx.feePayer = publicKey
+
+        // Phantom requires the transaction to be partially signed by other signers first
+        tx.partialSign(positionNft)
+
+        // Use Phantom's secure signAndSendTransaction method
+        const result = await provider.signAndSendTransaction(tx)
+        signature = result.signature
+      } else {
+        // Use standard wallet adapter for all other wallets (Solflare, Backpack, etc.)
+        // CRITICAL FIX: Pre-sign with positionNft before wallet signing
+        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed')
+        tx.recentBlockhash = blockhash
+        tx.lastValidBlockHeight = lastValidBlockHeight
+        tx.feePayer = publicKey
+
+        // IMPORTANT: Partially sign with positionNft AFTER setting blockhash and feePayer
+        // This prevents signature verification failures in Solflare and other wallets
+        tx.partialSign(positionNft)
+
+        // Send transaction (wallet will add user's signature)
+        // Do NOT pass signers array - the transaction is already partially signed
+        signature = await sendTransaction(tx, connection, {
+          skipPreflight: false,
+          preflightCommitment: 'confirmed',
+          maxRetries: 3,
+        })
+      }
+
+      // Confirm transaction using the new non-deprecated method
+      const latestBlockhash = await connection.getLatestBlockhash('confirmed')
+      await connection.confirmTransaction({
+        signature,
+        blockhash: latestBlockhash.blockhash,
+        lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+      }, 'confirmed')
 
       return { signature, position: positionNft.publicKey }
     },
@@ -348,20 +527,45 @@ export function AddLiquidityToPool({
     }
 
     try {
-      const tokenAMintInfo = await getMint(connection, new PublicKey(tokenAMint))
-      const tokenBMintInfo = await getMint(connection, new PublicKey(tokenBMint))
+      // FIX: Fetch token decimals safely using getParsedAccountInfo instead of getMint
+      // This works for both Token Program and Token-2022 Program
+      let tokenADecimals = 9 // Default fallback
+      let tokenBDecimals = 9 // Default fallback
 
-      const tokenAAmountBN = new BN(parseFloat(tokenAAmount) * Math.pow(10, tokenAMintInfo.decimals))
-      const tokenBAmountBN = new BN(parseFloat(tokenBAmount) * Math.pow(10, tokenBMintInfo.decimals))
+      try {
+        const [tokenAAccountInfo, tokenBAccountInfo] = await Promise.all([
+          connection.getParsedAccountInfo(new PublicKey(tokenAMint)),
+          connection.getParsedAccountInfo(new PublicKey(tokenBMint)),
+        ])
+
+        // Extract decimals from parsed account data
+        if (tokenAAccountInfo.value?.data && 'parsed' in tokenAAccountInfo.value.data) {
+          tokenADecimals = tokenAAccountInfo.value.data.parsed.info.decimals
+        }
+        if (tokenBAccountInfo.value?.data && 'parsed' in tokenBAccountInfo.value.data) {
+          tokenBDecimals = tokenBAccountInfo.value.data.parsed.info.decimals
+        }
+      } catch (mintError) {
+        console.error('[Token Decimals] Could not fetch mint decimals, using defaults:', mintError)
+        toast.warning('Using default token decimals. Transaction may fail if tokens use non-standard decimals.')
+      }
+
+      const tokenAAmountBN = new BN(parseFloat(tokenAAmount) * Math.pow(10, tokenADecimals))
+      const tokenBAmountBN = new BN(parseFloat(tokenBAmount) * Math.pow(10, tokenBDecimals))
 
       await addLiquidityMutation.mutateAsync({
         tokenAAmount: tokenAAmountBN,
         tokenBAmount: tokenBAmountBN,
-        tokenADecimals: tokenAMintInfo.decimals,
-        tokenBDecimals: tokenBMintInfo.decimals,
+        tokenADecimals,
+        tokenBDecimals,
       })
     } catch (error) {
       console.error('Error preparing add liquidity:', error)
+      if (error instanceof Error) {
+        toast.error('Failed to add liquidity', {
+          description: error.message
+        })
+      }
     }
   }
 

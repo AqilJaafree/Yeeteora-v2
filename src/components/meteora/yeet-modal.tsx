@@ -19,7 +19,8 @@ export function YeetModal({ children }: YeetModalProps) {
     // Mock percentage function (no functionality yet)
     const setPercentageAmount = (percentage: number) => {
         // TODO: Implement percentage calculation based on user's balance
-        console.log(`Setting ${percentage}% of balance`)
+        // Placeholder for future implementation
+        void percentage
     }
 
     return (
@@ -85,7 +86,6 @@ export function YeetModal({ children }: YeetModalProps) {
                             <Button
                                 onClick={() => {
                                     // TODO: Implement yeet functionality
-                                    console.log('Yeet action triggered')
                                     setIsOpen(false)
                                 }}
                                 className="gradient-primary border-0 text-white hover:opacity-90 font-bold py-4 rounded-2xl text-lg transition-all duration-200 hover:scale-105"

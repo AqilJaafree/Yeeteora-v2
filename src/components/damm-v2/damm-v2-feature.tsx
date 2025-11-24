@@ -99,7 +99,7 @@ export default function DammV2Feature() {
         ws.onmessage = (event) => {
           try {
             const data: TokenData = JSON.parse(event.data)
-            
+
             addOrUpdateToken(data)
 
             if (data.is_new_entry === true) {
@@ -115,7 +115,7 @@ export default function DammV2Feature() {
 
         ws.onclose = (event) => {
           setWsConnected(false)
-          
+
           if (event.code !== 1000 && reconnectAttempts < maxReconnectAttempts) {
             scheduleReconnect()
           }
@@ -138,13 +138,16 @@ export default function DammV2Feature() {
 
       reconnectAttempts++
       const delay = Math.min(baseReconnectDelay * Math.pow(2, reconnectAttempts - 1), 30000)
-      
+
       reconnectTimeout = setTimeout(() => {
         connectWebSocket()
       }, delay)
     }
 
     connectWebSocket()
+
+    // Capture the current timers for cleanup
+    const timersToClean = expiryTimers
 
     return () => {
       if (reconnectTimeout) {
@@ -153,9 +156,8 @@ export default function DammV2Feature() {
       if (ws) {
         ws.close(1000, 'Component unmounting')
       }
-      // Fix: Capture timers to avoid stale closure warning
-      const currentTimers = expiryTimers.current
-      Object.values(currentTimers).forEach(clearTimeout)
+      // Clear all expiry timers on unmount
+      Object.values(timersToClean.current).forEach(clearTimeout)
     }
   }, [isMounted])
 
