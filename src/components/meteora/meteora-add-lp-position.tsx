@@ -2,7 +2,7 @@
 
 import { useState} from 'react'
 import { useConnection, useWallet } from '@solana/wallet-adapter-react'
-import { PublicKey, Keypair, LAMPORTS_PER_SOL } from '@solana/web3.js'
+import { PublicKey, Keypair, LAMPORTS_PER_SOL, Transaction } from '@solana/web3.js'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -25,6 +25,17 @@ import { useGetBalance } from '../account/account-data-access'
 import DLMM, { StrategyType } from '@meteora-ag/dlmm'
 import { BN } from '@coral-xyz/anchor'
 
+// Phantom Provider type definition
+interface PhantomProvider {
+  isPhantom?: boolean
+  publicKey: PublicKey
+  signAndSendTransaction: (transaction: Transaction) => Promise<{ signature: string }>
+  signTransaction: (transaction: Transaction) => Promise<Transaction>
+  signAllTransactions: (transactions: Transaction[]) => Promise<Transaction[]>
+  connect: () => Promise<{ publicKey: PublicKey }>
+  disconnect: () => Promise<void>
+}
+
 interface AddLPPositionProps {
   pairAddress: string
   pairName: string
@@ -33,12 +44,11 @@ interface AddLPPositionProps {
 
 export function AddLPPosition({ pairAddress, pairName, isSOLPair }: AddLPPositionProps) {
   const { connection } = useConnection()
-  const { publicKey, sendTransaction } = useWallet()
+  const { publicKey, sendTransaction, wallet } = useWallet()
   const [isOpen, setIsOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [solAmount, setSolAmount] = useState('')
   const [showStrategyInfo, setShowStrategyInfo] = useState(false)
-  // const [showNotesInfo, setShowNotesInfo] = useState(false)
 
   // Get wallet balance
   const balanceQuery = useGetBalance({ address: publicKey || new PublicKey('11111111111111111111111111111112') })
@@ -62,19 +72,14 @@ export function AddLPPosition({ pairAddress, pairName, isSOLPair }: AddLPPositio
 
   // Polling-based confirmation method
   const confirmTransactionWithPolling = async (signature: string, maxRetries = 30): Promise<boolean> => {
-    console.log('Starting transaction confirmation with polling...')
-
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         const status = await connection.getSignatureStatus(signature, { searchTransactionHistory: true })
-
-        console.log(`Attempt ${attempt + 1}: Transaction status:`, status.value)
 
         if (status.value?.confirmationStatus === 'confirmed' || status.value?.confirmationStatus === 'finalized') {
           if (status.value.err) {
             throw new Error(`Transaction failed: ${JSON.stringify(status.value.err)}`)
           }
-          console.log('Transaction confirmed successfully!')
           return true
         }
 
@@ -85,7 +90,7 @@ export function AddLPPosition({ pairAddress, pairName, isSOLPair }: AddLPPositio
         // Wait 2 seconds before next attempt
         await new Promise((resolve) => setTimeout(resolve, 2000))
       } catch (error) {
-        console.warn(`Confirmation attempt ${attempt + 1} failed:`, error)
+        console.error(`[Transaction Confirmation] Attempt ${attempt + 1} failed:`, error)
 
         // If it's the last attempt, throw the error
         if (attempt === maxRetries - 1) {
@@ -114,16 +119,11 @@ export function AddLPPosition({ pairAddress, pairName, isSOLPair }: AddLPPositio
     setIsLoading(true)
 
     try {
-      console.log('Creating DLMM pool instance...')
-
       // Create DLMM pool instance
       const dlmmPool = await DLMM.create(connection, new PublicKey(pairAddress))
 
-      console.log('Getting active bin...')
       // Get active bin information
       const activeBin = await dlmmPool.getActiveBin()
-
-      console.log('Active bin:', activeBin)
 
       // Check which token is SOL
       const SOL_MINT = 'So11111111111111111111111111111111111111112'
@@ -133,8 +133,6 @@ export function AddLPPosition({ pairAddress, pairName, isSOLPair }: AddLPPositio
       if (!isTokenXSOL && !isTokenYSOL) {
         throw new Error('This pair does not contain SOL')
       }
-
-      console.log('SOL token detected:', isTokenXSOL ? 'Token X' : 'Token Y')
 
       // FIXED: Calculate range for one-sided BidAsk position - exactly 69 bins
       const NUM_BINS = 69
@@ -153,13 +151,6 @@ export function AddLPPosition({ pairAddress, pairName, isSOLPair }: AddLPPositio
         minBinId = maxBinId - (NUM_BINS - 1) // Exactly 69 bins total
       }
 
-      console.log('One-sided BidAsk position range:', {
-        minBinId,
-        maxBinId,
-        activeBinId: activeBin.binId,
-        totalBins: maxBinId - minBinId + 1,
-      })
-
       // Convert SOL amount to lamports
       const solInLamports = new BN(parseFloat(solAmount) * LAMPORTS_PER_SOL)
 
@@ -175,19 +166,10 @@ export function AddLPPosition({ pairAddress, pairName, isSOLPair }: AddLPPositio
         totalYAmount = solInLamports // All SOL goes to Y
       }
 
-      console.log('Position amounts:', {
-        totalXAmount: totalXAmount.toString(),
-        totalYAmount: totalYAmount.toString(),
-        isTokenXSOL,
-        strategy: 'BidAsk one-sided',
-      })
-
       // Generate new position keypair
       const newPosition = new Keypair()
-      console.log('New position address:', newPosition.publicKey.toString())
 
       // Create one-sided liquidity position with BidAsk strategy and FIXED bin range
-      console.log('Creating BidAsk position transaction...')
       const createPositionTx = await dlmmPool.initializePositionAndAddLiquidityByStrategy({
         positionPubKey: newPosition.publicKey,
         user: publicKey,
@@ -200,20 +182,52 @@ export function AddLPPosition({ pairAddress, pairName, isSOLPair }: AddLPPositio
         },
       })
 
-      console.log('Sending transaction...')
+      // SECURITY FIX: Use Phantom's native signAndSendTransaction for better security
+      // BUT only if the user is actually connected with Phantom wallet
+      let signature: string
 
-      // Send transaction
-      const signature = await sendTransaction(createPositionTx, connection, {
-        signers: [newPosition],
-      })
+      // Check if user is connected with Phantom wallet (not just if Phantom is installed)
+      const isConnectedWithPhantom = wallet?.adapter?.name === 'Phantom'
 
-      console.log('Transaction sent:', signature)
+      if (isConnectedWithPhantom) {
+        const provider = (window as Window & { phantom?: { solana?: PhantomProvider } }).phantom?.solana
+
+        if (!provider) {
+          throw new Error('Phantom provider not found')
+        }
+
+        // CRITICAL FIX: Fetch and set recentBlockhash before signing
+        // SDK-generated transactions don't include blockhash
+        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed')
+        createPositionTx.recentBlockhash = blockhash
+        createPositionTx.lastValidBlockHeight = lastValidBlockHeight
+        createPositionTx.feePayer = publicKey
+
+        // Phantom requires the transaction to be partially signed by other signers first
+        createPositionTx.partialSign(newPosition)
+
+        // Use Phantom's secure signAndSendTransaction method
+        const result = await provider.signAndSendTransaction(createPositionTx)
+        signature = result.signature
+      } else {
+        // Use standard wallet adapter for all other wallets (Solflare, Backpack, etc.)
+        // CRITICAL FIX: Pre-sign with newPosition before wallet signing
+        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed')
+        createPositionTx.recentBlockhash = blockhash
+        createPositionTx.lastValidBlockHeight = lastValidBlockHeight
+        createPositionTx.feePayer = publicKey
+
+        // IMPORTANT: Partially sign with newPosition BEFORE sending to wallet
+        // This prevents signature verification failures in Solflare and other wallets
+        createPositionTx.partialSign(newPosition)
+
+        // Send transaction (wallet will add user's signature)
+        // Do NOT pass signers array - the transaction is already partially signed
+        signature = await sendTransaction(createPositionTx, connection)
+      }
 
       // Use polling-based confirmation instead of WebSocket subscription
-      console.log('Confirming transaction with polling method...')
       await confirmTransactionWithPolling(signature)
-
-      console.log('Position address:', newPosition.publicKey.toString())
 
       // Close modal on success
       setIsOpen(false)
