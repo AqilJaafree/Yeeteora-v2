@@ -2,7 +2,7 @@
 'use client'
 
 import { useConnection, useWallet } from '@solana/wallet-adapter-react'
-import { PublicKey, Connection, Keypair, Transaction } from '@solana/web3.js'
+import { PublicKey, Connection, Keypair } from '@solana/web3.js'
 import { TOKEN_PROGRAM_ID, type Mint } from '@solana/spl-token'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { CpAmm, getSqrtPriceFromPrice, getUnClaimReward } from '@meteora-ag/cp-amm-sdk'
@@ -12,15 +12,11 @@ import { DammV2PositionStorage } from './damm-v2-storage'
 import { getTokenPriceUSD } from './damm-v2-price-utils'
 import type { PositionEntryRecord, PositionExitRecord } from './damm-v2-pnl-types'
 
-// Phantom Provider type definition
-interface PhantomProvider {
-  isPhantom?: boolean
-  publicKey: PublicKey
-  signAndSendTransaction: (transaction: Transaction) => Promise<{ signature: string }>
-  signTransaction: (transaction: Transaction) => Promise<Transaction>
-  signAllTransactions: (transactions: Transaction[]) => Promise<Transaction[]>
-  connect: () => Promise<{ publicKey: PublicKey }>
-  disconnect: () => Promise<void>
+// Standard SendOptions for consistent transaction handling
+const SEND_OPTIONS = {
+  skipPreflight: false,
+  preflightCommitment: 'confirmed' as const,
+  maxRetries: 3,
 }
 
 // DAMM v2 Position interface
@@ -358,7 +354,7 @@ export function useAddLiquidity({ poolAddress }: { poolAddress: PublicKey }) {
         tokenBProgram,
       })
 
-      const signature = await sendTransaction(addLiqTx, connection)
+      const signature = await sendTransaction(addLiqTx, connection, SEND_OPTIONS)
 
       // Confirm transaction using the new non-deprecated method
       const latestBlockhash = await connection.getLatestBlockhash('confirmed')
@@ -399,7 +395,7 @@ export function useAddLiquidity({ poolAddress }: { poolAddress: PublicKey }) {
  */
 export function useCreatePositionAndAddLiquidity({ poolAddress }: { poolAddress: PublicKey }) {
   const { connection } = useConnection()
-  const { publicKey, sendTransaction, wallet } = useWallet()
+  const { publicKey, sendTransaction } = useWallet()
   const client = useQueryClient()
 
   return useMutation({
@@ -471,49 +467,19 @@ export function useCreatePositionAndAddLiquidity({ poolAddress }: { poolAddress:
         tokenBProgram,
       })
 
-      // SECURITY FIX: Use Phantom's native signAndSendTransaction for better security
-      // BUT only if the user is actually connected with Phantom wallet
-      let signature: string
+      // SECURITY: Fetch blockhash and prepare transaction for signing
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed')
+      tx.recentBlockhash = blockhash
+      tx.lastValidBlockHeight = lastValidBlockHeight
+      tx.feePayer = publicKey
 
-      // Check if user is connected with Phantom wallet (not just if Phantom is installed)
-      const isConnectedWithPhantom = wallet?.adapter?.name === 'Phantom'
+      // IMPORTANT: Partially sign with positionNft BEFORE sending to wallet
+      // This is required for transactions with multiple signers
+      tx.partialSign(positionNft)
 
-      if (isConnectedWithPhantom) {
-        const provider = (window as Window & { phantom?: { solana?: PhantomProvider } }).phantom?.solana
-
-        if (!provider) {
-          throw new Error('Phantom provider not found')
-        }
-
-        // CRITICAL FIX: Fetch and set recentBlockhash before signing
-        // SDK-generated transactions don't include blockhash
-        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed')
-        tx.recentBlockhash = blockhash
-        tx.lastValidBlockHeight = lastValidBlockHeight
-        tx.feePayer = publicKey
-
-        // Phantom requires the transaction to be partially signed by other signers first
-        tx.partialSign(positionNft)
-
-        // Use Phantom's secure signAndSendTransaction method
-        const result = await provider.signAndSendTransaction(tx)
-        signature = result.signature
-      } else {
-        // Use standard wallet adapter for all other wallets (Solflare, Backpack, etc.)
-        // CRITICAL FIX: Pre-sign with positionNft before wallet signing
-        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed')
-        tx.recentBlockhash = blockhash
-        tx.lastValidBlockHeight = lastValidBlockHeight
-        tx.feePayer = publicKey
-
-        // IMPORTANT: Partially sign with positionNft BEFORE sending to wallet
-        // This prevents signature verification failures in Solflare and other wallets
-        tx.partialSign(positionNft)
-
-        // Send transaction (wallet will add user's signature)
-        // Do NOT pass signers array - the transaction is already partially signed
-        signature = await sendTransaction(tx, connection)
-      }
+      // Send transaction using wallet adapter (works for all wallets including Phantom)
+      // The wallet adapter automatically uses the correct signing method for each wallet
+      const signature = await sendTransaction(tx, connection, SEND_OPTIONS)
 
       // Confirm transaction using the new non-deprecated method
       const latestBlockhash = await connection.getLatestBlockhash('confirmed')
@@ -578,7 +544,7 @@ export function useCreatePositionAndAddLiquidity({ poolAddress }: { poolAddress:
 // Remove all liquidity and close position
 export function useRemoveAllLiquidityAndClosePosition({ poolAddress }: { poolAddress: PublicKey }) {
   const { connection } = useConnection()
-  const { publicKey, sendTransaction, wallet } = useWallet()
+  const { publicKey, sendTransaction } = useWallet()
   const client = useQueryClient()
 
   return useMutation({
@@ -627,34 +593,14 @@ export function useRemoveAllLiquidityAndClosePosition({ poolAddress }: { poolAdd
         vestings: [],
       })
 
-      // SECURITY FIX: Use Phantom's native signAndSendTransaction for better security
-      // BUT only if the user is actually connected with Phantom wallet
-      let signature: string
+      // SECURITY: Fetch blockhash and prepare transaction for signing
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed')
+      closeTx.recentBlockhash = blockhash
+      closeTx.lastValidBlockHeight = lastValidBlockHeight
+      closeTx.feePayer = publicKey
 
-      // Check if user is connected with Phantom wallet (not just if Phantom is installed)
-      const isConnectedWithPhantom = wallet?.adapter?.name === 'Phantom'
-
-      if (isConnectedWithPhantom) {
-        const provider = (window as Window & { phantom?: { solana?: PhantomProvider } }).phantom?.solana
-
-        if (!provider) {
-          throw new Error('Phantom provider not found')
-        }
-
-        // CRITICAL FIX: Fetch and set recentBlockhash before signing
-        // SDK-generated transactions don't include blockhash
-        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed')
-        closeTx.recentBlockhash = blockhash
-        closeTx.lastValidBlockHeight = lastValidBlockHeight
-        closeTx.feePayer = publicKey
-
-        // Use Phantom's secure signAndSendTransaction method
-        const result = await provider.signAndSendTransaction(closeTx)
-        signature = result.signature
-      } else {
-        // Fallback to standard wallet adapter for other wallets
-        signature = await sendTransaction(closeTx, connection)
-      }
+      // Send transaction using wallet adapter (works for all wallets including Phantom)
+      const signature = await sendTransaction(closeTx, connection, SEND_OPTIONS)
 
       // Confirm transaction using the new non-deprecated method
       const latestBlockhash = await connection.getLatestBlockhash('confirmed')
@@ -870,7 +816,7 @@ async function recordPositionExit(params: {
 // Create custom pool with dynamic config
 export function useCreateDammV2Pool() {
   const { connection } = useConnection()
-  const { publicKey, sendTransaction, wallet } = useWallet()
+  const { publicKey, sendTransaction } = useWallet()
   const client = useQueryClient()
 
   return useMutation({
@@ -1059,49 +1005,18 @@ export function useCreateDammV2Pool() {
         tokenBProgram,
       })
 
-      // SECURITY FIX: Use Phantom's native signAndSendTransaction for better security
-      // BUT only if the user is actually connected with Phantom wallet
-      let signature: string
+      // SECURITY: Fetch blockhash and prepare transaction for signing
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed')
+      tx.recentBlockhash = blockhash
+      tx.lastValidBlockHeight = lastValidBlockHeight
+      tx.feePayer = publicKey
 
-      // Check if user is connected with Phantom wallet (not just if Phantom is installed)
-      const isConnectedWithPhantom = wallet?.adapter?.name === 'Phantom'
+      // IMPORTANT: Partially sign with positionNft BEFORE sending to wallet
+      // This is required for transactions with multiple signers
+      tx.partialSign(positionNft)
 
-      if (isConnectedWithPhantom) {
-        const provider = (window as Window & { phantom?: { solana?: PhantomProvider } }).phantom?.solana
-
-        if (!provider) {
-          throw new Error('Phantom provider not found')
-        }
-
-        // CRITICAL FIX: Fetch and set recentBlockhash before signing
-        // SDK-generated transactions don't include blockhash
-        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed')
-        tx.recentBlockhash = blockhash
-        tx.lastValidBlockHeight = lastValidBlockHeight
-        tx.feePayer = publicKey
-
-        // Phantom requires the transaction to be partially signed by other signers first
-        tx.partialSign(positionNft)
-
-        // Use Phantom's secure signAndSendTransaction method
-        const result = await provider.signAndSendTransaction(tx)
-        signature = result.signature
-      } else {
-        // Use standard wallet adapter for all other wallets (Solflare, Backpack, etc.)
-        // CRITICAL FIX: Pre-sign with positionNft before wallet signing
-        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed')
-        tx.recentBlockhash = blockhash
-        tx.lastValidBlockHeight = lastValidBlockHeight
-        tx.feePayer = publicKey
-
-        // IMPORTANT: Partially sign with positionNft BEFORE sending to wallet
-        // This prevents signature verification failures in Solflare and other wallets
-        tx.partialSign(positionNft)
-
-        // Send transaction (wallet will add user's signature)
-        // Do NOT pass signers array - the transaction is already partially signed
-        signature = await sendTransaction(tx, connection)
-      }
+      // Send transaction using wallet adapter (works for all wallets including Phantom)
+      const signature = await sendTransaction(tx, connection, SEND_OPTIONS)
 
       // Confirm transaction using the new non-deprecated method
       const latestBlockhash = await connection.getLatestBlockhash('confirmed')

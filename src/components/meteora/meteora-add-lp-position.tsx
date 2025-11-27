@@ -2,7 +2,7 @@
 
 import { useState} from 'react'
 import { useConnection, useWallet } from '@solana/wallet-adapter-react'
-import { PublicKey, Keypair, LAMPORTS_PER_SOL, Transaction } from '@solana/web3.js'
+import { PublicKey, Keypair, LAMPORTS_PER_SOL } from '@solana/web3.js'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -25,15 +25,11 @@ import { useGetBalance } from '../account/account-data-access'
 import DLMM, { StrategyType } from '@meteora-ag/dlmm'
 import { BN } from '@coral-xyz/anchor'
 
-// Phantom Provider type definition
-interface PhantomProvider {
-  isPhantom?: boolean
-  publicKey: PublicKey
-  signAndSendTransaction: (transaction: Transaction) => Promise<{ signature: string }>
-  signTransaction: (transaction: Transaction) => Promise<Transaction>
-  signAllTransactions: (transactions: Transaction[]) => Promise<Transaction[]>
-  connect: () => Promise<{ publicKey: PublicKey }>
-  disconnect: () => Promise<void>
+// Standard SendOptions for consistent transaction handling
+const SEND_OPTIONS = {
+  skipPreflight: false,
+  preflightCommitment: 'confirmed' as const,
+  maxRetries: 3,
 }
 
 interface AddLPPositionProps {
@@ -44,7 +40,7 @@ interface AddLPPositionProps {
 
 export function AddLPPosition({ pairAddress, pairName, isSOLPair }: AddLPPositionProps) {
   const { connection } = useConnection()
-  const { publicKey, sendTransaction, wallet } = useWallet()
+  const { publicKey, sendTransaction } = useWallet()
   const [isOpen, setIsOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [solAmount, setSolAmount] = useState('')
@@ -182,49 +178,19 @@ export function AddLPPosition({ pairAddress, pairName, isSOLPair }: AddLPPositio
         },
       })
 
-      // SECURITY FIX: Use Phantom's native signAndSendTransaction for better security
-      // BUT only if the user is actually connected with Phantom wallet
-      let signature: string
+      // SECURITY: Fetch blockhash and prepare transaction for signing
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed')
+      createPositionTx.recentBlockhash = blockhash
+      createPositionTx.lastValidBlockHeight = lastValidBlockHeight
+      createPositionTx.feePayer = publicKey
 
-      // Check if user is connected with Phantom wallet (not just if Phantom is installed)
-      const isConnectedWithPhantom = wallet?.adapter?.name === 'Phantom'
+      // IMPORTANT: Partially sign with newPosition BEFORE sending to wallet
+      // This is required for transactions with multiple signers
+      createPositionTx.partialSign(newPosition)
 
-      if (isConnectedWithPhantom) {
-        const provider = (window as Window & { phantom?: { solana?: PhantomProvider } }).phantom?.solana
-
-        if (!provider) {
-          throw new Error('Phantom provider not found')
-        }
-
-        // CRITICAL FIX: Fetch and set recentBlockhash before signing
-        // SDK-generated transactions don't include blockhash
-        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed')
-        createPositionTx.recentBlockhash = blockhash
-        createPositionTx.lastValidBlockHeight = lastValidBlockHeight
-        createPositionTx.feePayer = publicKey
-
-        // Phantom requires the transaction to be partially signed by other signers first
-        createPositionTx.partialSign(newPosition)
-
-        // Use Phantom's secure signAndSendTransaction method
-        const result = await provider.signAndSendTransaction(createPositionTx)
-        signature = result.signature
-      } else {
-        // Use standard wallet adapter for all other wallets (Solflare, Backpack, etc.)
-        // CRITICAL FIX: Pre-sign with newPosition before wallet signing
-        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed')
-        createPositionTx.recentBlockhash = blockhash
-        createPositionTx.lastValidBlockHeight = lastValidBlockHeight
-        createPositionTx.feePayer = publicKey
-
-        // IMPORTANT: Partially sign with newPosition BEFORE sending to wallet
-        // This prevents signature verification failures in Solflare and other wallets
-        createPositionTx.partialSign(newPosition)
-
-        // Send transaction (wallet will add user's signature)
-        // Do NOT pass signers array - the transaction is already partially signed
-        signature = await sendTransaction(createPositionTx, connection)
-      }
+      // Send transaction using wallet adapter (works for all wallets including Phantom)
+      // The wallet adapter automatically uses the correct signing method for each wallet
+      const signature = await sendTransaction(createPositionTx, connection, SEND_OPTIONS)
 
       // Use polling-based confirmation instead of WebSocket subscription
       await confirmTransactionWithPolling(signature)
