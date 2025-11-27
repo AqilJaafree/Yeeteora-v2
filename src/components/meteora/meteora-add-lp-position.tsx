@@ -2,7 +2,7 @@
 
 import { useState} from 'react'
 import { useConnection, useWallet } from '@solana/wallet-adapter-react'
-import { PublicKey, Keypair, LAMPORTS_PER_SOL, Transaction } from '@solana/web3.js'
+import { PublicKey, Keypair, LAMPORTS_PER_SOL } from '@solana/web3.js'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'

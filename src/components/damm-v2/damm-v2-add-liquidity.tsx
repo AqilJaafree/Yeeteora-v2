@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useConnection, useWallet } from '@solana/wallet-adapter-react'
-import { PublicKey, Keypair, Transaction } from '@solana/web3.js'
+import { PublicKey, Keypair } from '@solana/web3.js'
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
