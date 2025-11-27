@@ -9,6 +9,13 @@ import DLMM from '@meteora-ag/dlmm'
 import BN from 'bn.js'
 import { toast } from 'sonner'
 
+// Standard SendOptions for consistent transaction handling
+const SEND_OPTIONS = {
+  skipPreflight: false,
+  preflightCommitment: 'confirmed' as const,
+  maxRetries: 3,
+}
+
 // Import the actual types from DLMM library
 import type { PositionInfo } from '@meteora-ag/dlmm'
 
@@ -217,10 +224,10 @@ export function usePositionActions(
       
       if (Array.isArray(txOrTxs)) {
         for (const tx of txOrTxs) {
-          await sendTransaction(tx, closeConnection)
+          await sendTransaction(tx, closeConnection, SEND_OPTIONS)
         }
       } else {
-        await sendTransaction(txOrTxs, closeConnection)
+        await sendTransaction(txOrTxs, closeConnection, SEND_OPTIONS)
       }
       
       toast.success("Your position has been closed and your funds have been withdrawn.")
@@ -268,10 +275,10 @@ export function usePositionActions(
       if (tx) {
         if (Array.isArray(tx)) {
           for (const transaction of tx) {
-            await sendTransaction(transaction, closeConnection)
+            await sendTransaction(transaction, closeConnection, SEND_OPTIONS)
           }
         } else {
-          await sendTransaction(tx, closeConnection)
+          await sendTransaction(tx, closeConnection, SEND_OPTIONS)
         }
         toast.success("Your fees have been claimed.")
         
