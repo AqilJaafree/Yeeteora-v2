@@ -47,7 +47,7 @@ export function AddLiquidityToPool({
   children,
 }: AddLiquidityToPoolProps) {
   const { connection } = useConnection()
-  const { publicKey, sendTransaction } = useWallet()
+  const { publicKey, signTransaction } = useWallet()
   const client = useQueryClient()
   
   const [isOpen, setIsOpen] = useState(false)
@@ -443,13 +443,25 @@ export function AddLiquidityToPool({
       tx.lastValidBlockHeight = lastValidBlockHeight
       tx.feePayer = publicKey
 
-      // IMPORTANT: Partially sign with positionNft BEFORE sending to wallet
-      // This is required for transactions with multiple signers
-      tx.partialSign(positionNft)
+      // SECURITY FIX: Phantom's recommended signing pattern to avoid security flags
+      // Wallet MUST sign FIRST, then additional signers sign afterward
+      // Reference: Phantom support recommendation
+      if (!signTransaction) {
+        throw new Error('Wallet does not support transaction signing')
+      }
 
-      // Send transaction using wallet adapter (works for all wallets including Phantom)
-      // The wallet adapter automatically uses the correct signing method for each wallet
-      const signature = await sendTransaction(tx, connection, SEND_OPTIONS)
+      // Step 1: Wallet signs the transaction FIRST
+      const walletSignedTx = await signTransaction(tx)
+
+      // Step 2: Additional signers sign AFTER wallet
+      walletSignedTx.partialSign(positionNft)
+
+      // Step 3: Send the fully signed transaction
+      const signature = await connection.sendRawTransaction(walletSignedTx.serialize(), {
+        skipPreflight: SEND_OPTIONS.skipPreflight,
+        preflightCommitment: SEND_OPTIONS.preflightCommitment,
+        maxRetries: SEND_OPTIONS.maxRetries,
+      })
 
       // Confirm transaction using the new non-deprecated method
       const latestBlockhash = await connection.getLatestBlockhash('confirmed')

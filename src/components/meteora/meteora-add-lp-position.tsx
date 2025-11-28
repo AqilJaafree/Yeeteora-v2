@@ -40,7 +40,7 @@ interface AddLPPositionProps {
 
 export function AddLPPosition({ pairAddress, pairName, isSOLPair }: AddLPPositionProps) {
   const { connection } = useConnection()
-  const { publicKey, sendTransaction } = useWallet()
+  const { publicKey, signTransaction } = useWallet()
   const [isOpen, setIsOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [solAmount, setSolAmount] = useState('')
@@ -102,7 +102,7 @@ export function AddLPPosition({ pairAddress, pairName, isSOLPair }: AddLPPositio
   }
 
   const handleAddPosition = async () => {
-    if (!publicKey || !sendTransaction) {
+    if (!publicKey || !signTransaction) {
       toast.error('Please connect your wallet')
       return
     }
@@ -184,13 +184,25 @@ export function AddLPPosition({ pairAddress, pairName, isSOLPair }: AddLPPositio
       createPositionTx.lastValidBlockHeight = lastValidBlockHeight
       createPositionTx.feePayer = publicKey
 
-      // IMPORTANT: Partially sign with newPosition BEFORE sending to wallet
-      // This is required for transactions with multiple signers
-      createPositionTx.partialSign(newPosition)
+      // SECURITY FIX: Phantom's recommended signing pattern to avoid security flags
+      // Wallet MUST sign FIRST, then additional signers sign afterward
+      // Reference: Phantom support recommendation
+      if (!signTransaction) {
+        throw new Error('Wallet does not support transaction signing')
+      }
 
-      // Send transaction using wallet adapter (works for all wallets including Phantom)
-      // The wallet adapter automatically uses the correct signing method for each wallet
-      const signature = await sendTransaction(createPositionTx, connection, SEND_OPTIONS)
+      // Step 1: Wallet signs the transaction FIRST
+      const walletSignedTx = await signTransaction(createPositionTx)
+
+      // Step 2: Additional signers sign AFTER wallet
+      walletSignedTx.partialSign(newPosition)
+
+      // Step 3: Send the fully signed transaction
+      const signature = await connection.sendRawTransaction(walletSignedTx.serialize(), {
+        skipPreflight: SEND_OPTIONS.skipPreflight,
+        preflightCommitment: SEND_OPTIONS.preflightCommitment,
+        maxRetries: SEND_OPTIONS.maxRetries,
+      })
 
       // Use polling-based confirmation instead of WebSocket subscription
       await confirmTransactionWithPolling(signature)
