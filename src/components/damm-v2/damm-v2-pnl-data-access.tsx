@@ -66,17 +66,35 @@ export function useGetDammV2PositionsPnL(address: PublicKey | null) {
       for (const position of positions) {
         const entry = entries.get(position.positionPubkey.toBase58())
         if (!entry) {
+          if (process.env.NODE_ENV === 'development') {
+            console.warn(
+              `[PnL] Skipping position ${position.positionPubkey.toBase58()} - no entry record found`,
+              '\nThis position needs to be backfilled. The auto-backfill hook should handle this automatically.'
+            )
+          }
           continue
         }
 
-        const tokenAPrice = priceMap.get(position.poolState.tokenAMint.toBase58()) || 0
-        const tokenBPrice = priceMap.get(position.poolState.tokenBMint.toBase58()) || 0
+        try {
+          const tokenAPrice = priceMap.get(position.poolState.tokenAMint.toBase58()) || 0
+          const tokenBPrice = priceMap.get(position.poolState.tokenBMint.toBase58()) || 0
 
-        const tokenAMeta = { decimals: entry.decimalsA, usdPrice: tokenAPrice }
-        const tokenBMeta = { decimals: entry.decimalsB, usdPrice: tokenBPrice }
+          const tokenAMeta = { decimals: entry.decimalsA, usdPrice: tokenAPrice }
+          const tokenBMeta = { decimals: entry.decimalsB, usdPrice: tokenBPrice }
 
-        const pnl = await calculatePositionPnL(position, entry, tokenAMeta, tokenBMeta)
-        pnlCalculations.push(pnl)
+          const pnl = await calculatePositionPnL(position, entry, tokenAMeta, tokenBMeta)
+          pnlCalculations.push(pnl)
+        } catch (error) {
+          console.error(`[PnL] Failed to calculate PnL for position ${position.positionPubkey.toBase58()}:`, error)
+          // Continue with other positions even if one fails
+        }
+      }
+
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[PnL] Calculated PnL for ${pnlCalculations.length} out of ${positions.length} positions`)
+        if (pnlCalculations.length < positions.length) {
+          console.warn(`[PnL] ${positions.length - pnlCalculations.length} positions missing entry records and were skipped`)
+        }
       }
 
       return pnlCalculations

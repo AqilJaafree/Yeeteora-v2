@@ -62,3 +62,13 @@ export const TIMEFRAME_CONFIG = {
 export const RETRY_DELAY_MS_BASE = 1000 // Base delay for exponential backoff
 export const MAX_RETRY_DELAY_MS = 30000 // Maximum retry delay (30 seconds)
 export const MAX_RETRIES = 3 // Maximum number of retries
+
+// Concentrated Liquidity Math Constants (Meteora DAMM v2)
+import BN from 'bn.js'
+
+export const TICK_BASE = 1.0001 // Base for tick-to-price conversion (1 tick = 0.01% price change)
+export const Q64 = Math.pow(2, 64) // Q64.64 fixed-point divisor for sqrt prices
+export const MIN_SQRT_PRICE = new BN(4295128739) // Minimum sqrt price in Q64.64 (~1.0001^-443636)
+export const MAX_SQRT_PRICE = new BN('79226673515401279992447579055') // Maximum sqrt price in Q64.64 (~1.0001^443636)
+export const MIN_TICK = -443636 // Minimum tick value
+export const MAX_TICK = 443636 // Maximum tick value

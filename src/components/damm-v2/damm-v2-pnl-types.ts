@@ -173,22 +173,39 @@ export interface PositionPnLCalculation {
   // Investment
   initialInvestmentUSD: number
   currentValueUSD: number
+  liquidityValue: number // Value from liquidity (excluding fees/rewards)
 
   // Fees
   totalFeesEarnedUSD: number
   claimedFeesUSD: number
   unclaimedFeesUSD: number
 
+  // Rewards (separate from fees)
+  rewardsEarnedUSD: number // Total rewards earned (if any reward vaults exist)
+
   // P&L
-  unrealizedPnL: number // Excluding fees
-  unrealizedPnLWithFees: number // Including fees
+  unrealizedPnL: number // Excluding fees and rewards
+  unrealizedPnLWithFees: number // Including fees and rewards
   unrealizedPnLPercentage: number
+
+  // Impermanent Loss (separate component)
+  impermanentLoss: number // IL in USD (can be negative)
+  impermanentLossPercentage: number // IL as % of initial investment
+  hodlValue: number // What the position would be worth if held without providing liquidity
 
   // Price changes
   entryPrice: number
   currentPrice: number
   priceChange: number
   priceChangePercentage: number
+
+  // Concentrated Liquidity specifics
+  currentTick: number // Current pool tick
+  tickLower: number // Position lower tick bound
+  tickUpper: number // Position upper tick bound
+  sqrtPriceCurrent: string // Current sqrt price (Q64.64) as string
+  sqrtPriceLower: string // Lower sqrt price (Q64.64) as string
+  sqrtPriceUpper: string // Upper sqrt price (Q64.64) as string
 
   // Time metrics
   positionAgeHours: number
