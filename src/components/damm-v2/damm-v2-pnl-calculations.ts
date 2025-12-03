@@ -1,5 +1,6 @@
 // P&L calculation logic for DAMM v2 positions
 // Handles unrealized P&L, fees, time-series aggregation
+// Uses concentrated liquidity formulas from Meteora DAMM v2 (Dec 2025)
 
 import BN from 'bn.js'
 import type { DammV2Position } from './damm-v2-data-access'
@@ -11,6 +12,13 @@ import type {
 } from './damm-v2-pnl-types'
 import { TIMEFRAME_CONFIG } from '@/lib/damm-v2-pnl-constants'
 import { safeDivide, safePow10, validateDecimals } from '@/lib/validators'
+import {
+  sqrtPriceQ64ToPrice,
+  priceToTick,
+  calculateTokenAmountsFromLiquidity,
+  calculateImpermanentLoss,
+  isPositionInRange,
+} from '@/lib/concentrated-liquidity-math'
 
 /**
  * Safe conversion from BN to decimal number
@@ -53,14 +61,26 @@ interface TokenMetadata {
 }
 
 /**
- * Calculate P&L for a single position
- * Compares current value + fees against initial investment
+ * Calculate P&L for a single position using concentrated liquidity formulas
+ *
+ * Based on Meteora DAMM v2 concentrated liquidity model (Dec 2025):
+ * - Uses liquidity (L) and price range [√p_a, √p_b] to calculate token amounts
+ * - Simulates withdraw at current price to get position value
+ * - Calculates impermanent loss by comparing to HODL value
+ * - Includes fees and rewards separately
+ *
+ * Formula Summary:
+ * - V_current = simulated_withdraw_amounts × current_prices
+ * - Fees = unclaimed_fees × prices
+ * - Rewards = reward_amounts × prices (if reward vaults exist)
+ * - Unrealized PnL = V_current + Fees + Rewards - V_initial
+ * - IL = HODL_value - V_current (excluding fees/rewards)
  *
  * @param position - Current position state from SDK
  * @param entry - Entry record from localStorage
  * @param tokenAMeta - Token A metadata (decimals, price)
  * @param tokenBMeta - Token B metadata (decimals, price)
- * @returns P&L calculation result
+ * @returns P&L calculation result with concentrated liquidity metrics
  */
 export async function calculatePositionPnL(
   position: DammV2Position,
@@ -68,63 +88,212 @@ export async function calculatePositionPnL(
   tokenAMeta: TokenMetadata,
   tokenBMeta: TokenMetadata
 ): Promise<PositionPnLCalculation> {
-  // SECURITY: Safe conversion to avoid overflow
-  const currentTokenAAmount = safeTokenAmountToDecimal(position.tokenAAmount, tokenAMeta.decimals)
-  const currentTokenBAmount = safeTokenAmountToDecimal(position.tokenBAmount, tokenBMeta.decimals)
+  try {
+    // SECURITY: Validate inputs
+    if (!position || !entry || !tokenAMeta || !tokenBMeta) {
+      throw new Error('[PnL] Missing required parameters for PnL calculation')
+    }
 
-  // SECURITY: Safe conversion for fees
+    if (!position.poolState || !position.poolState.sqrtPrice) {
+      throw new Error('[PnL] Position missing poolState or sqrtPrice data')
+    }
+
+    // Extract sqrt prices from position
+    const sqrtPriceCurrent = position.poolState.sqrtPrice
+    const sqrtPriceLower = position.poolState.sqrtMinPrice
+    const sqrtPriceUpper = position.poolState.sqrtMaxPrice
+
+    // SECURITY: Validate sqrt prices are valid BN values
+    if (!sqrtPriceCurrent || sqrtPriceCurrent.lte(new BN(0))) {
+      console.warn('[PnL] Invalid current sqrt price:', sqrtPriceCurrent?.toString())
+      throw new Error('[PnL] Invalid current sqrt price')
+    }
+
+    if (!sqrtPriceLower || sqrtPriceLower.lte(new BN(0))) {
+      console.warn('[PnL] Invalid lower sqrt price:', sqrtPriceLower?.toString())
+      throw new Error('[PnL] Invalid lower sqrt price')
+    }
+
+    if (!sqrtPriceUpper || sqrtPriceUpper.lte(new BN(0))) {
+      console.warn('[PnL] Invalid upper sqrt price:', sqrtPriceUpper?.toString())
+      throw new Error('[PnL] Invalid upper sqrt price')
+    }
+
+    // Convert sqrt prices to regular prices for display/calculation
+    const priceCurrent = sqrtPriceQ64ToPrice(sqrtPriceCurrent)
+    const priceLower = sqrtPriceQ64ToPrice(sqrtPriceLower)
+    const priceUpper = sqrtPriceQ64ToPrice(sqrtPriceUpper)
+
+  // Convert to ticks for display
+  const currentTick = priceToTick(priceCurrent)
+  const tickLower = priceToTick(priceLower)
+  const tickUpper = priceToTick(priceUpper)
+
+  // Check if position is in range
+  const inRange = isPositionInRange(currentTick, tickLower, tickUpper)
+
+  // STEP 1: Simulate withdraw at current price to get token amounts
+  // This represents what the position is worth in tokens right now
+  const simulatedAmounts = calculateTokenAmountsFromLiquidity(
+    position.liquidity,
+    sqrtPriceCurrent,
+    sqrtPriceLower,
+    sqrtPriceUpper,
+    tokenAMeta.decimals,
+    tokenBMeta.decimals
+  )
+
+  // STEP 2: Calculate liquidity value (position value excluding fees/rewards)
+  const liquidityValueUSD =
+    simulatedAmounts.tokenAAmount * tokenAMeta.usdPrice +
+    simulatedAmounts.tokenBAmount * tokenBMeta.usdPrice
+
+  // STEP 3: Calculate unclaimed fees value
+  // SECURITY: Safe conversion to avoid overflow
   const unclaimedFeesA = safeTokenAmountToDecimal(position.feeOwedA, tokenAMeta.decimals)
   const unclaimedFeesB = safeTokenAmountToDecimal(position.feeOwedB, tokenBMeta.decimals)
-
-  // Calculate current values in USD
-  const currentValueUSD =
-    currentTokenAAmount * tokenAMeta.usdPrice + currentTokenBAmount * tokenBMeta.usdPrice
   const unclaimedFeesUSD = unclaimedFeesA * tokenAMeta.usdPrice + unclaimedFeesB * tokenBMeta.usdPrice
 
-  // Get initial investment from entry record
+  // STEP 4: Calculate rewards value (if any)
+  // SECURITY: Safe conversion for rewards
+  const rewardOneDecimal = safeTokenAmountToDecimal(position.rewardOne, tokenAMeta.decimals)
+  const rewardTwoDecimal = safeTokenAmountToDecimal(position.rewardTwo, tokenBMeta.decimals)
+  // Note: Rewards may use different tokens - for now we assume same as pool tokens
+  // This may need adjustment if rewards are in different tokens
+  const rewardsEarnedUSD =
+    rewardOneDecimal * tokenAMeta.usdPrice + rewardTwoDecimal * tokenBMeta.usdPrice
+
+  // STEP 5: Calculate total current value
+  const currentValueUSD = liquidityValueUSD + unclaimedFeesUSD + rewardsEarnedUSD
+
+  // STEP 6: Get initial investment from entry record
   const initialInvestmentUSD = entry.initialValueUSD
 
-  // Calculate P&L
-  const unrealizedPnL = currentValueUSD - initialInvestmentUSD
-  const unrealizedPnLWithFees = unrealizedPnL + unclaimedFeesUSD
+  // STEP 7: Calculate initial token amounts from entry
+  const initialTokenAAmount = new BN(entry.initialTokenAAmount)
+  const initialTokenBAmount = new BN(entry.initialTokenBAmount)
+  const initialTokenADecimal = safeTokenAmountToDecimal(initialTokenAAmount, entry.decimalsA)
+  const initialTokenBDecimal = safeTokenAmountToDecimal(initialTokenBAmount, entry.decimalsB)
+
+  // STEP 8: Calculate Impermanent Loss (IL)
+  // Compare current liquidity value to HODL value
+  const ilResult = calculateImpermanentLoss(
+    initialTokenADecimal,
+    initialTokenBDecimal,
+    entry.entryTokenAPrice,
+    entry.entryTokenBPrice,
+    tokenAMeta.usdPrice,
+    tokenBMeta.usdPrice,
+    liquidityValueUSD
+  )
+
+  // STEP 9: Calculate unrealized P&L
+  // Without fees/rewards (pure position performance)
+  const unrealizedPnL = liquidityValueUSD - initialInvestmentUSD
+
+  // With fees and rewards included
+  const unrealizedPnLWithFees = currentValueUSD - initialInvestmentUSD
 
   // SECURITY: Use safe division to prevent division by zero
   const unrealizedPnLPercentage = safeDivide(unrealizedPnLWithFees * 100, initialInvestmentUSD, 0)
 
+  // STEP 10: Calculate pool price changes (token B per token A)
   // SECURITY: Calculate price changes with safe division
   const currentPrice = safeDivide(tokenBMeta.usdPrice, tokenAMeta.usdPrice, 0)
   const entryPrice = entry.entryPoolPrice
   const priceChange = currentPrice - entryPrice
   const priceChangePercentage = safeDivide(priceChange * 100, entryPrice, 0)
 
-  // Time metrics
+  // STEP 11: Time metrics
   const positionAgeMs = Date.now() - entry.entryTimestamp
   const positionAgeHours = positionAgeMs / (1000 * 60 * 60)
   const positionAgeDays = positionAgeHours / 24
 
-  // Status checks
-  const isInRange =
-    position.poolState.sqrtPrice.gte(position.poolState.sqrtMinPrice) &&
-    position.poolState.sqrtPrice.lte(position.poolState.sqrtMaxPrice)
-
   return {
     positionAddress: position.positionPubkey.toBase58(),
+
+    // Investment values
     initialInvestmentUSD,
     currentValueUSD,
+    liquidityValue: liquidityValueUSD,
+
+    // Fees
     totalFeesEarnedUSD: unclaimedFeesUSD, // TODO: Add claimed fees from history
     claimedFeesUSD: 0, // TODO: Calculate from storage
     unclaimedFeesUSD,
+
+    // Rewards (separate from fees)
+    rewardsEarnedUSD,
+
+    // P&L
     unrealizedPnL,
     unrealizedPnLWithFees,
     unrealizedPnLPercentage,
+
+    // Impermanent Loss
+    impermanentLoss: ilResult.impermanentLoss,
+    impermanentLossPercentage: ilResult.impermanentLossPercentage,
+    hodlValue: ilResult.hodlValue,
+
+    // Price changes
     entryPrice,
     currentPrice,
     priceChange,
     priceChangePercentage,
+
+    // Concentrated Liquidity specifics
+    currentTick,
+    tickLower,
+    tickUpper,
+    sqrtPriceCurrent: sqrtPriceCurrent.toString(),
+    sqrtPriceLower: sqrtPriceLower.toString(),
+    sqrtPriceUpper: sqrtPriceUpper.toString(),
+
+    // Time metrics
     positionAgeHours,
     positionAgeDays,
+
+    // Status
     isOpen: true,
-    isInRange,
+    isInRange: inRange,
+  }
+  } catch (error) {
+    // Enhanced error logging
+    console.error('[PnL] Error calculating position PnL:', error)
+    console.error('[PnL] Position:', position.positionPubkey.toBase58())
+    console.error('[PnL] Entry:', entry)
+
+    // Return a safe fallback with zero values
+    return {
+      positionAddress: position.positionPubkey.toBase58(),
+      initialInvestmentUSD: entry?.initialValueUSD || 0,
+      currentValueUSD: 0,
+      liquidityValue: 0,
+      totalFeesEarnedUSD: 0,
+      claimedFeesUSD: 0,
+      unclaimedFeesUSD: 0,
+      rewardsEarnedUSD: 0,
+      unrealizedPnL: 0,
+      unrealizedPnLWithFees: 0,
+      unrealizedPnLPercentage: 0,
+      impermanentLoss: 0,
+      impermanentLossPercentage: 0,
+      hodlValue: 0,
+      entryPrice: entry?.entryPoolPrice || 0,
+      currentPrice: 0,
+      priceChange: 0,
+      priceChangePercentage: 0,
+      currentTick: 0,
+      tickLower: 0,
+      tickUpper: 0,
+      sqrtPriceCurrent: '0',
+      sqrtPriceLower: '0',
+      sqrtPriceUpper: '0',
+      positionAgeHours: 0,
+      positionAgeDays: 0,
+      isOpen: true,
+      isInRange: false,
+    }
   }
 }
 
