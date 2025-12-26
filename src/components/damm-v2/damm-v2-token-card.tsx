@@ -8,22 +8,7 @@ import { motion } from 'motion/react'
 import { Copy, Users, AlertTriangle, TrendingUp } from 'lucide-react'
 import { toast } from 'sonner'
 import { AddLiquidityToPool } from './damm-v2-add-liquidity'
-
-export interface TokenData {
-  mint: string
-  delta_other: number
-  delta_jup: number
-  total: number
-  total_jupiter: number
-  jupiter_pct: number
-  is_new_entry: boolean
-  total_trade_size: number
-  delta_total_trade_size: number
-  delta_jupiter_trade_size: number
-  jupiter_trade_size: number
-  tge_at: number
-  timestamp: number
-}
+import { TokenData } from '@/lib/validators'
 
 // Enhanced Jupiter Token API response type
 interface JupiterTokenData {

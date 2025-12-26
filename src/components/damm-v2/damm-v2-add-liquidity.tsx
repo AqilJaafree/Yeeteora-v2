@@ -191,7 +191,9 @@ export function AddLiquidityToPool({
       const container = document.getElementById("jupiter-swap-container")
       if (container) {
         container.style.display = 'none'
-        container.innerHTML = ''
+        while (container.firstChild) {
+          container.removeChild(container.firstChild)
+        }
       }
       setJupiterContainerId(null)
     } else if (activeTab === 'swap' && isOpen) {
@@ -207,7 +209,9 @@ export function AddLiquidityToPool({
     if (!isOpen) {
       const container = document.getElementById("jupiter-swap-container")
       if (container) {
-        container.innerHTML = ''
+        while (container.firstChild) {
+          container.removeChild(container.firstChild)
+        }
         container.style.display = 'block' // Reset display for next time
       }
       setJupiterContainerId(null)

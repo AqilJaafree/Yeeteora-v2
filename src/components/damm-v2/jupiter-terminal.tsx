@@ -20,9 +20,11 @@ export function JupiterTerminal({
     const initializeTerminal = () => {
       if (typeof window !== "undefined" && window.Jupiter && terminalRef.current) {
         try {
-          // Clear any existing content
-          terminalRef.current.innerHTML = ''
-          
+          // Clear any existing content (safe DOM manipulation)
+          while (terminalRef.current.firstChild) {
+            terminalRef.current.removeChild(terminalRef.current.firstChild)
+          }
+
           window.Jupiter.init({
             displayMode: "integrated",
             integratedTargetId: terminalRef.current.id,
@@ -61,9 +63,11 @@ export function JupiterTerminal({
   const retryConnection = () => {
     setIsLoading(true)
     setError(null)
-    
+
     if (terminalRef.current) {
-      terminalRef.current.innerHTML = ''
+      while (terminalRef.current.firstChild) {
+        terminalRef.current.removeChild(terminalRef.current.firstChild)
+      }
     }
     
     setTimeout(() => {
