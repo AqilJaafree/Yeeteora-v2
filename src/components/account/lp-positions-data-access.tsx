@@ -97,8 +97,9 @@ export function useGetLPPositions({ address }: { address: PublicKey }) {
         }
         
         // Get all positions using the working DLMM method
+        // Type cast to work around @solana/web3.js version mismatch between packages
         const userPositions = await DLMM.getAllLbPairPositionsByUser(
-          discoveryConnection,
+          discoveryConnection as any,
           address
         )
         
@@ -208,8 +209,9 @@ export function usePositionActions(
         ? new Connection(customRpcUrl, { commitment: 'confirmed' })
         : connection
 
+      // Type cast to work around @solana/web3.js version mismatch
       const dlmmPool = await DLMM.create(
-        closeConnection,
+        closeConnection as any,
         new PublicKey(lbPairAddress)
       )
       
@@ -222,12 +224,13 @@ export function usePositionActions(
         shouldClaimAndClose: true,
       })
       
+      // Type cast transactions to work around @solana/web3.js version mismatch
       if (Array.isArray(txOrTxs)) {
         for (const tx of txOrTxs) {
-          await sendTransaction(tx, closeConnection, SEND_OPTIONS)
+          await sendTransaction(tx as any, closeConnection as any, SEND_OPTIONS)
         }
       } else {
-        await sendTransaction(txOrTxs, closeConnection, SEND_OPTIONS)
+        await sendTransaction(txOrTxs as any, closeConnection as any, SEND_OPTIONS)
       }
       
       toast.success("Your position has been closed and your funds have been withdrawn.")
@@ -261,8 +264,9 @@ export function usePositionActions(
         ? new Connection(customRpcUrl, { commitment: 'confirmed' })
         : connection
 
+      // Type cast to work around @solana/web3.js version mismatch
       const dlmmPool = await DLMM.create(
-        closeConnection,
+        closeConnection as any,
         new PublicKey(lbPairAddress)
       )
       
@@ -272,13 +276,14 @@ export function usePositionActions(
         position,
       })
       
+      // Type cast transactions to work around @solana/web3.js version mismatch
       if (tx) {
         if (Array.isArray(tx)) {
           for (const transaction of tx) {
-            await sendTransaction(transaction, closeConnection, SEND_OPTIONS)
+            await sendTransaction(transaction as any, closeConnection as any, SEND_OPTIONS)
           }
         } else {
-          await sendTransaction(tx, closeConnection, SEND_OPTIONS)
+          await sendTransaction(tx as any, closeConnection as any, SEND_OPTIONS)
         }
         toast.success("Your fees have been claimed.")
         

@@ -1,5 +1,6 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { TokenData, TokenCard } from './damm-v2-token-card'
+import { TokenCard } from './damm-v2-token-card'
+import { TokenData } from '@/lib/validators'
 
 interface NewTokenPopupProps {
   token: TokenData | null

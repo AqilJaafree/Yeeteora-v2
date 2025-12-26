@@ -123,3 +123,86 @@ export function safePow10(exponent: number): number {
 
   return result
 }
+
+/**
+ * TokenData interface for WebSocket validation
+ */
+export interface TokenData {
+  mint: string
+  delta_other: number
+  delta_jup: number
+  total: number
+  total_jupiter: number
+  jupiter_pct: number
+  is_new_entry: boolean
+  total_trade_size: number
+  delta_total_trade_size: number
+  delta_jupiter_trade_size: number
+  jupiter_trade_size: number
+  tge_at: number
+  timestamp: number
+}
+
+/**
+ * Validates WebSocket TokenData to prevent injection attacks
+ * SECURITY: All external WebSocket data must pass through this validator
+ */
+export function isValidTokenData(data: unknown): data is TokenData {
+  if (typeof data !== 'object' || data === null) {
+    console.warn('[WebSocket] Invalid data: not an object')
+    return false
+  }
+
+  const d = data as Record<string, unknown>
+
+  // Validate mint address (CRITICAL - prevents address injection)
+  if (typeof d.mint !== 'string' || !isValidSolanaAddress(d.mint)) {
+    console.warn('[WebSocket] Invalid or malicious mint address')
+    return false
+  }
+
+  // Validate all numeric fields are finite numbers
+  const numericFields = [
+    'delta_other',
+    'delta_jup',
+    'total',
+    'total_jupiter',
+    'jupiter_pct',
+    'total_trade_size',
+    'delta_total_trade_size',
+    'delta_jupiter_trade_size',
+    'jupiter_trade_size',
+    'tge_at',
+    'timestamp'
+  ]
+
+  for (const field of numericFields) {
+    if (typeof d[field] !== 'number' || !Number.isFinite(d[field])) {
+      console.warn(`[WebSocket] Invalid numeric field: ${field}`)
+      return false
+    }
+  }
+
+  // Validate boolean
+  if (typeof d.is_new_entry !== 'boolean') {
+    console.warn('[WebSocket] Invalid is_new_entry: must be boolean')
+    return false
+  }
+
+  // Validate timestamps are reasonable (after verifying they're numbers above)
+  if ((d.timestamp as number) < 0 || (d.tge_at as number) < 0) {
+    console.warn('[WebSocket] Invalid timestamp values')
+    return false
+  }
+
+  // Prevent prototype pollution
+  const dangerousKeys = ['__proto__', 'constructor', 'prototype']
+  for (const key of Object.keys(d)) {
+    if (dangerousKeys.includes(key)) {
+      console.warn('[WebSocket] Potential prototype pollution attempt detected')
+      return false
+    }
+  }
+
+  return true
+}

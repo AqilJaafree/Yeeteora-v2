@@ -6,22 +6,9 @@ import { AppHero } from '@/components/app-hero'
 import { NewTokenPopup } from './damm-v2-new-token-popup'
 import { Button } from '../ui/button'
 import { TokenCard } from './damm-v2-token-card'
+import { TokenData, isValidTokenData } from '@/lib/validators'
 
-export interface TokenData {
-  mint: string
-  delta_other: number
-  delta_jup: number
-  total: number
-  total_jupiter: number
-  jupiter_pct: number
-  is_new_entry: boolean
-  total_trade_size: number
-  delta_total_trade_size: number
-  delta_jupiter_trade_size: number
-  jupiter_trade_size: number
-  tge_at: number
-  timestamp: number
-}
+export type { TokenData }
 
 const EXPIRY_MS = 5 * 60 * 1000
 
@@ -98,7 +85,16 @@ export default function DammV2Feature() {
 
         ws.onmessage = (event) => {
           try {
-            const data: TokenData = JSON.parse(event.data)
+            const parsedData = JSON.parse(event.data)
+
+            // SECURITY: Validate all external WebSocket data
+            if (!isValidTokenData(parsedData)) {
+              console.error('[WebSocket] Received invalid token data, rejecting')
+              return
+            }
+
+            // Type-safe after validation
+            const data: TokenData = parsedData
 
             addOrUpdateToken(data)
 
@@ -108,8 +104,8 @@ export default function DammV2Feature() {
                 setPopupOpen(true)
               }, 0)
             }
-          } catch {
-            // Silently handle parsing errors
+          } catch (error) {
+            console.error('[WebSocket] Failed to parse message:', error)
           }
         }
 
