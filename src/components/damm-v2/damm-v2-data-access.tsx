@@ -5,7 +5,7 @@ import { useConnection, useWallet } from '@solana/wallet-adapter-react'
 import { PublicKey, Connection, Keypair } from '@solana/web3.js'
 import { TOKEN_PROGRAM_ID, type Mint } from '@solana/spl-token'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { CpAmm, getSqrtPriceFromPrice, getUnClaimLpFee } from '@meteora-ag/cp-amm-sdk'
+import { CpAmm, getSqrtPriceFromPrice, getUnClaimReward } from '@meteora-ag/cp-amm-sdk'
 import { toast } from 'sonner'
 import BN from 'bn.js'
 import { DammV2PositionStorage } from './damm-v2-storage'
@@ -142,7 +142,7 @@ export function useGetDammV2Positions({ address }: { address: PublicKey }) {
             let feeOwedB = new BN(0)
 
             try {
-              const unclaimedReward = getUnClaimLpFee(poolState, positionState)
+              const unclaimedReward = getUnClaimReward(poolState, positionState)
               feeOwedA = unclaimedReward.feeTokenA || new BN(0)
               feeOwedB = unclaimedReward.feeTokenB || new BN(0)
 
@@ -580,7 +580,7 @@ export function useRemoveAllLiquidityAndClosePosition({ poolAddress }: { poolAdd
       })
 
       // Get unclaimed fees
-      const unclaimedReward = getUnClaimLpFee(poolState, positionState)
+      const unclaimedReward = getUnClaimReward(poolState, positionState)
       const totalFeesA = unclaimedReward.feeTokenA || new BN(0)
       const totalFeesB = unclaimedReward.feeTokenB || new BN(0)
 
