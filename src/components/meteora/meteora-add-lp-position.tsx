@@ -116,7 +116,8 @@ export function AddLPPosition({ pairAddress, pairName, isSOLPair }: AddLPPositio
 
     try {
       // Create DLMM pool instance
-      const dlmmPool = await DLMM.create(connection, new PublicKey(pairAddress))
+      // Type cast to work around @solana/web3.js version mismatch
+      const dlmmPool = await DLMM.create(connection as any, new PublicKey(pairAddress))
 
       // Get active bin information
       const activeBin = await dlmmPool.getActiveBin()
@@ -192,7 +193,8 @@ export function AddLPPosition({ pairAddress, pairName, isSOLPair }: AddLPPositio
       }
 
       // Step 1: Wallet signs the transaction FIRST
-      const walletSignedTx = await signTransaction(createPositionTx)
+      // Type cast to work around @solana/web3.js version mismatch
+      const walletSignedTx = await signTransaction(createPositionTx as any)
 
       // Step 2: Additional signers sign AFTER wallet
       walletSignedTx.partialSign(newPosition)
