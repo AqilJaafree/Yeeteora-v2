@@ -3,7 +3,7 @@
 
 import { useState } from 'react'
 import { useConnection, useWallet } from '@solana/wallet-adapter-react'
-import { PublicKey, Connection } from '@solana/web3.js'
+import { PublicKey } from '@solana/web3.js'
 import { useQuery } from '@tanstack/react-query'
 import DLMM from '@meteora-ag/dlmm'
 import BN from 'bn.js'
@@ -65,41 +65,10 @@ export function useGetLPPositions({ address }: { address: PublicKey }) {
           console.log('🚀 Starting LP position discovery...')
         }
         
-        // Use custom RPC for heavy operations if available
-        const customRpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL ||
-          process.env.NEXT_PUBLIC_Custom_RPC_URL ||
-          process.env.NEXT_PUBLIC_HEAVY_RPC_URL ||
-          connection.rpcEndpoint
-        
-        // Create optimized connection for heavy operations
-        const discoveryConnection = customRpcUrl !== connection.rpcEndpoint
-          ? new Connection(
-              customRpcUrl,
-              {
-                commitment: 'confirmed',
-                confirmTransactionInitialTimeout: 60000,
-              }
-            )
-          : connection
-        
-        // Test connection first
-        try {
-          if (process.env.NODE_ENV === 'development') {
-            console.log('🧪 Testing RPC connection...')
-          }
-          await discoveryConnection.getVersion()
-          if (process.env.NODE_ENV === 'development') {
-            console.log('✅ RPC connection successful')
-          }
-        } catch (rpcError: unknown) {
-          console.error('❌ RPC connection test failed:', rpcError instanceof Error ? rpcError.message : 'Unknown RPC error')
-          throw new Error(`RPC connection failed: ${rpcError instanceof Error ? rpcError.message : 'Unknown RPC error'}`)
-        }
-        
         // Get all positions using the working DLMM method
         // Type cast to work around @solana/web3.js version mismatch between packages
         const userPositions = await DLMM.getAllLbPairPositionsByUser(
-          discoveryConnection as any,
+          connection as any,
           address
         )
         
@@ -122,7 +91,7 @@ export function useGetLPPositions({ address }: { address: PublicKey }) {
           if (process.env.NODE_ENV === 'development') {
             console.error('💡 RPC Error Solution:')
             console.error('   - Your RPC is blocking heavy operations (getProgramAccounts)')
-            console.error('   - Set NEXT_PUBLIC_SOLANA_RPC_URL in your .env.local file')
+            console.error('   - Set CUSTOM_RPC_URL in your .env.local file')
             console.error('   - Use a paid RPC provider like Alchemy, QuickNode, or Helius')
           }
         } else if (errorMessage.includes('timeout')) {
@@ -204,17 +173,12 @@ export function usePositionActions(
       const lowerBinId = Number(pos.positionData.lowerBinId)
       const upperBinId = Number(pos.positionData.upperBinId)
       
-      const customRpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || connection.rpcEndpoint
-      const closeConnection = customRpcUrl !== connection.rpcEndpoint
-        ? new Connection(customRpcUrl, { commitment: 'confirmed' })
-        : connection
-
       // Type cast to work around @solana/web3.js version mismatch
       const dlmmPool = await DLMM.create(
-        closeConnection as any,
+        connection as any,
         new PublicKey(lbPairAddress)
       )
-      
+
       const txOrTxs = await dlmmPool.removeLiquidity({
         user,
         position: posKey,
@@ -223,14 +187,14 @@ export function usePositionActions(
         bps: new BN(10000),
         shouldClaimAndClose: true,
       })
-      
+
       // Type cast transactions to work around @solana/web3.js version mismatch
       if (Array.isArray(txOrTxs)) {
         for (const tx of txOrTxs) {
-          await sendTransaction(tx as any, closeConnection as any, SEND_OPTIONS)
+          await sendTransaction(tx as any, connection as any, SEND_OPTIONS)
         }
       } else {
-        await sendTransaction(txOrTxs as any, closeConnection as any, SEND_OPTIONS)
+        await sendTransaction(txOrTxs as any, connection as any, SEND_OPTIONS)
       }
       
       toast.success("Your position has been closed and your funds have been withdrawn.")
@@ -259,31 +223,26 @@ export function usePositionActions(
       const posKey = pos.publicKey
       const user = publicKey
       
-      const customRpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || connection.rpcEndpoint
-      const closeConnection = customRpcUrl !== connection.rpcEndpoint
-        ? new Connection(customRpcUrl, { commitment: 'confirmed' })
-        : connection
-
       // Type cast to work around @solana/web3.js version mismatch
       const dlmmPool = await DLMM.create(
-        closeConnection as any,
+        connection as any,
         new PublicKey(lbPairAddress)
       )
-      
+
       const position = await dlmmPool.getPosition(posKey)
       const tx = await dlmmPool.claimSwapFee({
         owner: user,
         position,
       })
-      
+
       // Type cast transactions to work around @solana/web3.js version mismatch
       if (tx) {
         if (Array.isArray(tx)) {
           for (const transaction of tx) {
-            await sendTransaction(transaction as any, closeConnection as any, SEND_OPTIONS)
+            await sendTransaction(transaction as any, connection as any, SEND_OPTIONS)
           }
         } else {
-          await sendTransaction(tx as any, closeConnection as any, SEND_OPTIONS)
+          await sendTransaction(tx as any, connection as any, SEND_OPTIONS)
         }
         toast.success("Your fees have been claimed.")
         

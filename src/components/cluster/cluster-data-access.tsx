@@ -19,23 +19,19 @@ export enum ClusterNetwork {
   Custom = 'custom',
 }
 
-// Updated clusters with Alchemy mainnet as primary
+// Resolve the /api/rpc proxy path to a full URL.
+// During SSR (no window) fall back to the public RPC – no actual calls happen server-side
+// because all data fetching is client-only (React Query + useEffect).
+const rpcProxyUrl =
+  typeof window !== 'undefined'
+    ? `${window.location.origin}/api/rpc`
+    : 'https://api.mainnet-beta.solana.com'
+
+// Mainnet routes through /api/rpc so RPC keys stay server-side
 export const defaultClusters: SolanaCluster[] = [
-   {
-    name: 'custom-mainnet',
-    endpoint: process.env.NEXT_PUBLIC_Custom_RPC_URL || 'https://api.mainnet-beta.solana.com',
-    network: ClusterNetwork.Mainnet,
-  },
   {
-    name: 'alchemy-mainnet',
-    endpoint: process.env.NEXT_PUBLIC_ALCHEMY_SOLANA_API_KEY 
-      ? `https://solana-mainnet.g.alchemy.com/v2/${process.env.NEXT_PUBLIC_ALCHEMY_SOLANA_API_KEY}`
-      : 'https://api.mainnet-beta.solana.com', // Fallback to public RPC if no API key
-    network: ClusterNetwork.Mainnet,
-  },
-  {
-    name: 'mainnet-beta',
-    endpoint: 'https://api.mainnet-beta.solana.com',
+    name: 'mainnet',
+    endpoint: rpcProxyUrl,
     network: ClusterNetwork.Mainnet,
   },
   {
@@ -54,8 +50,8 @@ export const defaultClusters: SolanaCluster[] = [
   },
 ]
 
-const clusterAtom = atomWithStorage<SolanaCluster>('solana-cluster', defaultClusters[0]) // Default to Alchemy mainnet
-const clustersAtom = atomWithStorage<SolanaCluster[]>('solana-clusters', defaultClusters)
+const clusterAtom = atomWithStorage<SolanaCluster>('solana-cluster-v2', defaultClusters[0])
+const clustersAtom = atomWithStorage<SolanaCluster[]>('solana-clusters-v2', defaultClusters)
 
 const activeClustersAtom = atom<SolanaCluster[]>((get) => {
   const clusters = get(clustersAtom)

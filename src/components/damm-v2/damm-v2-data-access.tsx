@@ -57,24 +57,7 @@ export function useGetDammV2Positions({ address }: { address: PublicKey }) {
           console.log('🚀 Starting DAMM v2 position discovery...')
         }
 
-        // Use custom RPC for heavy operations if available
-        const customRpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL ||
-          process.env.NEXT_PUBLIC_Custom_RPC_URL ||
-          process.env.NEXT_PUBLIC_HEAVY_RPC_URL ||
-          connection.rpcEndpoint
-
-        // Create optimized connection for heavy operations
-        const discoveryConnection = customRpcUrl !== connection.rpcEndpoint
-          ? new Connection(
-              customRpcUrl,
-              {
-                commitment: 'confirmed',
-                confirmTransactionInitialTimeout: 60000,
-              }
-            )
-          : connection
-
-        const cpAmm = new CpAmm(discoveryConnection)
+        const cpAmm = new CpAmm(connection)
 
         // Use the SDK's built-in method to get all user positions
         // This method internally uses getProgramAccounts to find position NFTs
@@ -214,7 +197,7 @@ export function useGetDammV2Positions({ address }: { address: PublicKey }) {
           if (process.env.NODE_ENV === 'development') {
             console.error('💡 RPC Error Solution:')
             console.error('   - Your RPC is blocking heavy operations (getProgramAccounts)')
-            console.error('   - Set NEXT_PUBLIC_SOLANA_RPC_URL in your .env.local file')
+            console.error('   - Set CUSTOM_RPC_URL in your .env.local file')
             console.error('   - Use a paid RPC provider like Alchemy, QuickNode, or Helius')
           }
         } else if (errorMessage.includes('timeout')) {
