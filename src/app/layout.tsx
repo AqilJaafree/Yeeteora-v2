@@ -25,8 +25,8 @@ export const viewport: Viewport = {
 }
 
 const links: { label: string; path: string }[] = [
-  { label: 'Home', path: '/' },
-  { label: 'Damm v2', path: '/damm-v2' },
+  // { label: 'Home', path: '/' },  // DLMM page - commented out
+  { label: 'Damm v2', path: '/' },
   { label: 'Account', path: '/account' },
 ]
 
