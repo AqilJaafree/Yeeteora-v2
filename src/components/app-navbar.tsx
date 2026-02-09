@@ -23,8 +23,8 @@ export function AppNavbar({ links }: NavbarProps) {
 
     const getPageTag = (label: string) => {
         switch (label) {
-            case 'Home':
-                return 'DLMM'
+            // case 'Home':
+            //     return 'DLMM'
             case 'Damm v2':
                 return 'DAMM V2'
             case 'Account':
