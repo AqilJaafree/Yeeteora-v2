@@ -292,7 +292,7 @@ function PositionItem({ position }: { position: DammV2Position }) {
               <div className="text-white font-medium font-serif text-sm mb-1">
                 {tokenAAmount === 0 ? '0' : formatBalanceWithSub(tokenAAmount, 6)} {tokenAMeta?.symbol || ''}
                 {tokenAMeta && tokenAAmount !== 0 && (
-                  <span className="text-xs text-gray-500 ml-1">
+                  <span className="text-xs text-gray-500 ml-1 font-serif">
                     (${(tokenAAmount * Number(tokenAMeta.usdPrice || 0)).toFixed(2)})
                   </span>
                 )}
@@ -300,7 +300,7 @@ function PositionItem({ position }: { position: DammV2Position }) {
               <div className="text-white font-medium font-serif text-sm">
                 {tokenBAmount === 0 ? '0' : formatBalanceWithSub(tokenBAmount, 6)} {tokenBMeta?.symbol || ''}
                 {tokenBMeta && tokenBAmount !== 0 && (
-                  <span className="text-xs text-gray-500 ml-1">
+                  <span className="text-xs text-gray-500 ml-1 font-serif">
                     (${(tokenBAmount * Number(tokenBMeta.usdPrice || 0)).toFixed(2)})
                   </span>
                 )}
@@ -317,7 +317,7 @@ function PositionItem({ position }: { position: DammV2Position }) {
               <div className="text-white font-medium font-serif text-xs mb-1">
                 {feeAAmount === 0 ? '0' : formatBalanceWithSub(feeAAmount, 6)} {tokenAMeta?.symbol || ''}
                 {tokenAMeta && feeAAmount !== 0 && (
-                  <span className="text-xs text-gray-500 ml-1">
+                  <span className="text-xs text-gray-500 ml-1 font-serif">
                     (${feeAValue.toFixed(2)})
                   </span>
                 )}
@@ -325,7 +325,7 @@ function PositionItem({ position }: { position: DammV2Position }) {
               <div className="text-white font-medium font-serif text-xs">
                 {feeBAmount === 0 ? '0' : formatBalanceWithSub(feeBAmount, 6)} {tokenBMeta?.symbol || ''}
                 {tokenBMeta && feeBAmount !== 0 && (
-                  <span className="text-xs text-gray-500 ml-1">
+                  <span className="text-xs text-gray-500 ml-1 font-serif">
                     (${feeBValue.toFixed(2)})
                   </span>
                 )}
@@ -493,7 +493,7 @@ export function DammV2Positions({ address }: DammV2PositionsProps) {
       {/* Header */}
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold">DAMM v2 Positions</h1>
-        <span className="text-sm text-muted-foreground">
+        <span className="text-sm text-muted-foreground font-serif">
           {query.data ? `${query.data.length} positions found` : '0 positions found'}
         </span>
       </div>

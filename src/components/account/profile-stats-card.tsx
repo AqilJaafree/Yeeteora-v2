@@ -65,73 +65,64 @@ export function ProfileStatsCard() {
   const profitPercentage = stats.totalProfitPercentage
 
   return (
-    <div className="gradient-card lg:px-[70px] px-4 rounded-2xl space-y-6">
+    <div className="gradient-card px-4 sm:px-6 lg:px-[70px] rounded-2xl space-y-6">
       <div>
-        <h2 className="text-3xl md:text-5xl font-bold font-sans tracking-wide">PROFILE</h2>
+        <h2 className="text-2xl sm:text-3xl md:text-5xl font-bold font-sans tracking-wide">PROFILE</h2>
       </div>
 
-      <div className="flex lg:flex-row flex-col justify-between">
-        <div className='grid grid-cols-2 gap-8 flex-1'>
-          {/* Left Stats Column */}
-          <div className="space-y-6">
-            {/* Total Net Worth */}
-            <div>
-              <p className="text-sm text-sub-text font-sans mb-1">Total Net Worth</p>
-              <p className="text-2xl font-bold text-white font-sans">{formatUSD(stats.totalNetWorth)}</p>
-            </div>
-
-            {/* Open Positions */}
-            <div>
-              <p className="text-sm text-sub-text font-sans mb-1">Open Positions</p>
-              <p className="text-base font-bold text-tertiary font-sans">{stats.openPositionsCount}</p>
-            </div>
-
-            {/* Avg Position Size */}
-            <div>
-              <p className="text-sm text-sub-text font-sans mb-1">Avg Position Size</p>
-              <p className="text-base font-bold text-tertiary font-sans">{formatUSD(stats.avgPositionSize)}</p>
-            </div>
-          </div>
-
-          {/* Middle Stats Column */}
-          <div className="space-y-6">
-            {/* Total P&L */}
-            <div>
-              <p className="text-sm text-sub-text font-sans mb-1">Total P&L</p>
-              <p
-                className={`text-2xl font-bold font-sans ${stats.totalProfit >= 0 ? 'text-tertiary' : 'text-destructive'}`}
-              >
-                {stats.totalProfit >= 0 ? '+' : '-'}
-                {formatUSD(Math.abs(stats.totalProfit))}
-              </p>
-              <p className={`text-xs ${profitPercentage >= 0 ? 'text-tertiary' : 'text-destructive'}`}>
-                {profitPercentage >= 0 ? '+' : ''}{formatPercentage(profitPercentage)}
-              </p>
-            </div>
-
-            {/* Total Invested */}
-            <div>
-              <p className="text-sm text-sub-text font-sans mb-1">Total Invested</p>
-              <p className="text-base font-bold font-sans">{formatUSD(stats.totalInvested)}</p>
-            </div>
-
-            {/* Fee Earned */}
-            <div>
-              <p className="text-sm text-sub-text font-sans mb-1">Fee Earned</p>
-              <p className="text-base font-bold text-white font-sans">{formatUSD(stats.feeEarned)}</p>
-            </div>
-          </div>
+      {/* Stats row — 6 items in one line on md+, 2-col grid on mobile */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-4 gap-y-5">
+        {/* Total Net Worth */}
+        <div>
+          <p className="text-xs text-sub-text font-sans mb-1 whitespace-nowrap">Total Net Worth</p>
+          <p className="text-xl font-bold text-white font-serif">{formatUSD(stats.totalNetWorth)}</p>
         </div>
 
-        {/* Right Chart Column */}
-        <div className="flex-1 lg:mt-0 mt-10 w-full lg:w-auto">
-          <DammV2PnLChart
-            data={chartDataQuery.data || []}
-            timeframe={selectedTimeframe}
-            onTimeframeChange={setSelectedTimeframe}
-            isLoading={chartDataQuery.isLoading}
-          />
+        {/* Total P&L */}
+        <div>
+          <p className="text-xs text-sub-text font-sans mb-1 whitespace-nowrap">Total P&L</p>
+          <p className={`text-xl font-bold font-serif ${stats.totalProfit > 0 ? 'text-tertiary' : stats.totalProfit < 0 ? 'text-destructive' : 'text-white'}`}>
+            {stats.totalProfit > 0 ? '+' : stats.totalProfit < 0 ? '-' : ''}
+            {formatUSD(Math.abs(stats.totalProfit))}
+          </p>
+          <p className={`text-xs font-serif ${profitPercentage > 0 ? 'text-tertiary' : profitPercentage < 0 ? 'text-destructive' : 'text-sub-text'}`}>
+            {profitPercentage > 0 ? '+' : ''}{formatPercentage(profitPercentage)}
+          </p>
         </div>
+
+        {/* Open Positions */}
+        <div>
+          <p className="text-xs text-sub-text font-sans mb-1 whitespace-nowrap">Open Positions</p>
+          <p className="text-xl font-bold text-tertiary font-serif">{stats.openPositionsCount}</p>
+        </div>
+
+        {/* Total Invested */}
+        <div>
+          <p className="text-xs text-sub-text font-sans mb-1 whitespace-nowrap">Total Invested</p>
+          <p className="text-xl font-bold font-serif">{formatUSD(stats.totalInvested)}</p>
+        </div>
+
+        {/* Avg Position Size */}
+        <div>
+          <p className="text-xs text-sub-text font-sans mb-1 whitespace-nowrap">Avg Position</p>
+          <p className="text-xl font-bold text-tertiary font-serif">{formatUSD(stats.avgPositionSize)}</p>
+        </div>
+
+        {/* Fee Earned */}
+        <div>
+          <p className="text-xs text-sub-text font-sans mb-1 whitespace-nowrap">Fee Earned</p>
+          <p className="text-xl font-bold text-white font-serif">{formatUSD(stats.feeEarned)}</p>
+        </div>
+      </div>
+
+      {/* Chart */}
+      <div className="w-full">
+        <DammV2PnLChart
+          data={chartDataQuery.data || []}
+          timeframe={selectedTimeframe}
+          onTimeframeChange={setSelectedTimeframe}
+          isLoading={chartDataQuery.isLoading}
+        />
       </div>
     </div>
   )

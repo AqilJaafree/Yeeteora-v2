@@ -346,7 +346,7 @@ function DLMMPositionItem({
               <div className="text-white font-medium font-serif text-sm mb-1">
                 {xBalance === 0 ? '0' : formatBalanceWithSub(xBalance, 6)} {tokenXMeta?.symbol || ''}
                 {tokenXMeta && xBalance !== 0 && (
-                  <span className="text-xs text-gray-500 ml-1">
+                  <span className="text-xs text-gray-500 ml-1 font-serif">
                     (${(xBalance * Number(tokenXMeta.usdPrice || 0)).toFixed(2)})
                   </span>
                 )}
@@ -354,7 +354,7 @@ function DLMMPositionItem({
               <div className="text-white font-medium font-serif text-sm">
                 {yBalance === 0 ? '0' : formatBalanceWithSub(yBalance, 6)} {tokenYMeta?.symbol || ''}
                 {tokenYMeta && yBalance !== 0 && (
-                  <span className="text-xs text-gray-500 ml-1">
+                  <span className="text-xs text-gray-500 ml-1 font-serif">
                     (${(yBalance * Number(tokenYMeta.usdPrice || 0)).toFixed(2)})
                   </span>
                 )}
@@ -412,8 +412,8 @@ function DLMMPositionItem({
         >
           {/* Header with Pair Name and Type Badge */}
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="flex items-center shrink-0">
                 {tokenXMeta && tokenXMeta.icon ? (
                   <Image
                     src={tokenXMeta.icon}
@@ -443,23 +443,23 @@ function DLMMPositionItem({
                   </div>
                 )}
               </div>
-              <div>
-                <div className="text-white font-serif font-semibold text-lg">
+              <div className="min-w-0">
+                <div className="text-white font-serif font-semibold text-base sm:text-lg truncate">
                   {tokenXMeta && tokenYMeta
                     ? `${tokenXMeta.symbol} / ${tokenYMeta.symbol}`
                     : 'Loading...'}
                 </div>
               </div>
             </div>
-            <div className="mt-1">
-              <div className="text-blue-400 font-medium font-serif text-xs bg-blue-500/20 px-2 py-1 rounded-[8px] inline-block">
+            <div className="shrink-0 ml-2">
+              <div className="text-blue-400 font-medium font-serif text-xs bg-blue-500/20 px-2 py-1 rounded-[8px]">
                 DLMM
               </div>
             </div>
           </div>
 
           {/* Two Column Grid for Key Metrics */}
-          <div className="grid grid-cols-2 gap-4 mb-4">
+          <div className="grid grid-cols-2 gap-x-3 gap-y-3 sm:gap-4 mb-4">
             <div className="text-left">
               <div className="text-xs text-muted-foreground font-serif mb-1">Total Liquidity</div>
               <div className="text-primary font-medium font-serif">{formatNumber(totalLiquidityUSD)}</div>
@@ -471,7 +471,7 @@ function DLMMPositionItem({
           </div>
 
           {/* Additional Metrics */}
-          <div className="grid grid-cols-2 gap-4 mb-4">
+          <div className="grid grid-cols-2 gap-x-3 gap-y-3 sm:gap-4 mb-4">
             <div className="text-left">
               <div className="text-xs text-muted-foreground font-serif mb-1">Current Balance</div>
               <BalanceDisplay size="text-sm" />
@@ -701,7 +701,7 @@ function DammV2PositionItem({
               <div className="text-white font-medium font-serif text-sm mb-1">
                 {tokenAAmount === 0 ? '0' : formatBalanceWithSub(tokenAAmount, 6)} {tokenAMeta?.symbol || ''}
                 {tokenAMeta && tokenAAmount !== 0 && (
-                  <span className="text-xs text-gray-500 ml-1">
+                  <span className="text-xs text-gray-500 ml-1 font-serif">
                     (${(tokenAAmount * Number(tokenAMeta.usdPrice || 0)).toFixed(2)})
                   </span>
                 )}
@@ -709,7 +709,7 @@ function DammV2PositionItem({
               <div className="text-white font-medium font-serif text-sm">
                 {tokenBAmount === 0 ? '0' : formatBalanceWithSub(tokenBAmount, 6)} {tokenBMeta?.symbol || ''}
                 {tokenBMeta && tokenBAmount !== 0 && (
-                  <span className="text-xs text-gray-500 ml-1">
+                  <span className="text-xs text-gray-500 ml-1 font-serif">
                     (${(tokenBAmount * Number(tokenBMeta.usdPrice || 0)).toFixed(2)})
                   </span>
                 )}
@@ -763,8 +763,8 @@ function DammV2PositionItem({
         >
           {/* Header with Pair Name and Type Badge */}
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="flex items-center shrink-0">
                 {tokenAMeta && tokenAMeta.icon ? (
                   <Image
                     src={tokenAMeta.icon}
@@ -794,23 +794,23 @@ function DammV2PositionItem({
                   </div>
                 )}
               </div>
-              <div>
-                <div className="text-white font-serif font-semibold text-lg">
+              <div className="min-w-0">
+                <div className="text-white font-serif font-semibold text-base sm:text-lg truncate">
                   {tokenAMeta && tokenBMeta
                     ? `${tokenAMeta.symbol} / ${tokenBMeta.symbol}`
                     : 'Loading...'}
                 </div>
               </div>
             </div>
-            <div className="mt-1">
-              <div className="text-purple-400 font-medium font-serif text-xs bg-purple-500/20 px-2 py-1 rounded-[8px] inline-block">
+            <div className="shrink-0 ml-2">
+              <div className="text-purple-400 font-medium font-serif text-xs bg-purple-500/20 px-2 py-1 rounded-[8px]">
                 DAMM v2
               </div>
             </div>
           </div>
 
           {/* Two Column Grid for Key Metrics */}
-          <div className="grid grid-cols-2 gap-4 mb-4">
+          <div className="grid grid-cols-2 gap-x-3 gap-y-3 sm:gap-4 mb-4">
             <div className="text-left">
               <div className="text-xs text-muted-foreground font-serif mb-1">Total Liquidity</div>
               <div className="text-primary font-medium font-serif">{formatNumber(totalValue)}</div>
@@ -818,7 +818,7 @@ function DammV2PositionItem({
             <div className="text-left">
               <div className="text-xs text-muted-foreground font-serif mb-1">Status</div>
               <div
-                className={`px-3 py-1 rounded-full text-xs font-medium font-serif inline-block ${
+                className={`px-2 py-1 rounded-full text-xs font-medium font-serif inline-block ${
                   inRange ? 'bg-green-500/20 text-green-500' : 'bg-yellow-500/20 text-yellow-500'
                 }`}
               >
@@ -828,7 +828,7 @@ function DammV2PositionItem({
           </div>
 
           {/* Additional Metrics */}
-          <div className="grid grid-cols-2 gap-4 mb-4">
+          <div className="grid grid-cols-2 gap-x-3 gap-y-3 sm:gap-4 mb-4">
             <div className="text-left">
               <div className="text-xs text-muted-foreground font-serif mb-1">Current Balance</div>
               <BalanceDisplay size="text-sm" />
@@ -897,7 +897,7 @@ export function UnifiedPositions({ address }: UnifiedPositionsProps) {
   // Don't render anything until mounted
   if (!isMounted) {
     return (
-      <div className="lg:px-[70px] px-4 mx-auto space-y-12">
+      <div className="px-3 sm:px-4 lg:px-[70px] mx-auto space-y-12">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">Your Positions</h1>
           <span className="text-sm text-muted-foreground">Loading...</span>
@@ -907,11 +907,11 @@ export function UnifiedPositions({ address }: UnifiedPositionsProps) {
   }
 
   return (
-    <div className="lg:px-[70px] px-4 mx-auto space-y-12">
+    <div className="px-3 sm:px-4 lg:px-[70px] mx-auto space-y-12">
       {/* Header */}
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold">Your Positions</h1>
-        <span className="text-sm text-muted-foreground">{totalPositions} positions found</span>
+        <span className="text-sm text-muted-foreground font-serif">{totalPositions} positions found</span>
       </div>
 
       {/* Error Message */}

@@ -26,7 +26,7 @@ export default function AccountDetailFeature() {
   }
 
   return (
-    <div className='lg:mt-[80px] mt-[40px] space-y-20'>
+    <div className='lg:mt-[80px] mt-[40px] space-y-8 md:space-y-14 lg:space-y-20'>
       {/* Profile Stats Card */}
       <ProfileStatsCard />
       

@@ -12,6 +12,77 @@ export type { TokenData }
 
 const EXPIRY_MS = 5 * 60 * 1000
 
+/** Generates mock TokenData for UI preview when no live WebSocket data is present */
+function getMockTokens(): TokenData[] {
+  const now = Math.floor(Date.now() / 1000)
+  return [
+    {
+      // BONK – high Jupiter activity → red card
+      mint: 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263',
+      delta_jup: 28,
+      delta_other: 210,
+      total: 1840,
+      total_jupiter: 420,
+      jupiter_pct: 22.83,
+      is_new_entry: false,
+      total_trade_size: 6_400_000_000,
+      delta_total_trade_size: 1_200_000_000,
+      delta_jupiter_trade_size: 600_000_000,
+      jupiter_trade_size: 1_800_000_000,
+      tge_at: now - 300,
+      timestamp: now,
+    },
+    {
+      // WIF – medium Jupiter activity → yellow card
+      mint: 'EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm',
+      delta_jup: 14,
+      delta_other: 95,
+      total: 970,
+      total_jupiter: 210,
+      jupiter_pct: 21.65,
+      is_new_entry: false,
+      total_trade_size: 3_100_000_000,
+      delta_total_trade_size: 800_000_000,
+      delta_jupiter_trade_size: 320_000_000,
+      jupiter_trade_size: 900_000_000,
+      tge_at: now - 720,
+      timestamp: now,
+    },
+    {
+      // POPCAT – normal activity → default card
+      mint: '7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr',
+      delta_jup: 6,
+      delta_other: 38,
+      total: 510,
+      total_jupiter: 95,
+      jupiter_pct: 18.63,
+      is_new_entry: false,
+      total_trade_size: 1_600_000_000,
+      delta_total_trade_size: 350_000_000,
+      delta_jupiter_trade_size: 120_000_000,
+      jupiter_trade_size: 400_000_000,
+      tge_at: now - 1800,
+      timestamp: now,
+    },
+    {
+      // Wrapped SOL – low activity → default card
+      mint: 'So11111111111111111111111111111111111111112',
+      delta_jup: 2,
+      delta_other: 15,
+      total: 230,
+      total_jupiter: 44,
+      jupiter_pct: 19.13,
+      is_new_entry: false,
+      total_trade_size: 750_000_000,
+      delta_total_trade_size: 180_000_000,
+      delta_jupiter_trade_size: 55_000_000,
+      jupiter_trade_size: 200_000_000,
+      tge_at: now - 3600,
+      timestamp: now,
+    },
+  ]
+}
+
 // Get WebSocket URL from environment variable with secure fallback
 const getWebSocketURL = () => {
   if (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_WEBSOCKET_URL) {
@@ -170,37 +241,47 @@ export default function DammV2Feature() {
     }
   }
 
-  const tokenArray = isMounted ? Object.values(tokens) : []
+  const liveTokenArray = isMounted ? Object.values(tokens) : []
+  const mockTokens = getMockTokens()
+  const showMockData = isMounted && liveTokenArray.length === 0
 
   return (
     <div className="min-h-screen">
       <AppHero title="Alpha call Damm v2" subtitle="Next-generation Dynamic Automated Market Making strategies" />
-      
-      <div className="lg:px-[70px] px-4 mx-auto flex justify-between items-center mb-4">
-        <div className="flex items-center gap-4">
+
+      <div className="px-4 sm:px-6 lg:px-[70px] mx-auto flex justify-between items-center mb-4">
+        <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             {isMounted && (
-              <div className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+              <div className={`w-2 h-2 rounded-full shrink-0 ${wsConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
             )}
-            <span className="text-sm text-muted-foreground">
+            <span className="text-xs sm:text-sm text-muted-foreground">
               {!isMounted ? 'Connecting...' : wsConnected ? 'Connected' : 'Disconnected'}
             </span>
           </div>
+          {showMockData && (
+            <span className="px-2 py-0.5 text-xs rounded-full bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 whitespace-nowrap">
+              Demo Data
+            </span>
+          )}
         </div>
 
-        <div className="flex items-center gap-2">
-          <Button className="px-6 py-3 text-lg" onClick={handleNewDAMMv2Pool}>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button className="px-3 py-1.5 text-sm sm:px-6 sm:py-3 sm:text-base" onClick={handleNewDAMMv2Pool}>
             New Pool
           </Button>
         </div>
       </div>
 
-      <div className="lg:px-[70px] px-4 mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
-        {tokenArray.map((token) => (
+      <div className="px-3 sm:px-4 lg:px-[70px] mx-auto flex flex-col gap-2 pb-6">
+        {liveTokenArray.map((token) => (
+          <TokenCard key={token.mint} token={token} />
+        ))}
+        {showMockData && mockTokens.map((token) => (
           <TokenCard key={token.mint} token={token} />
         ))}
         {!isMounted && (
-          <div className="col-span-full text-center py-8">
+          <div className="text-center py-8">
             <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin mx-auto mb-4"></div>
             <p className="text-muted-foreground">Loading real-time data...</p>
           </div>

@@ -34,12 +34,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* Simplified - remove event handlers */}
         <Script
           src="https://terminal.jup.ag/main-v4.js"
-          strategy="beforeInteractive"
+          strategy="afterInteractive"
           data-preload
-          defer
         />
       </head>
       {/* Add suppressHydrationWarning to body to prevent Grammarly extension conflicts */}

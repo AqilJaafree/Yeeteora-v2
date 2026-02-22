@@ -422,7 +422,7 @@ function PositionItem({
               <div className="text-white font-medium font-serif text-sm mb-1">
                 {xBalance === 0 ? "0" : formatBalanceWithSub(xBalance, 6)} {tokenXMeta?.symbol || ""}
                 {tokenXMeta && xBalance !== 0 && (
-                  <span className="text-xs text-gray-500 ml-1">
+                  <span className="text-xs text-gray-500 ml-1 font-serif">
                     (${(xBalance * Number(tokenXMeta.usdPrice || 0)).toFixed(2)})
                   </span>
                 )}
@@ -430,7 +430,7 @@ function PositionItem({
               <div className="text-white font-medium font-serif text-sm">
                 {yBalance === 0 ? "0" : formatBalanceWithSub(yBalance, 6)} {tokenYMeta?.symbol || ""}
                 {tokenYMeta && yBalance !== 0 && (
-                  <span className="text-xs text-gray-500 ml-1">
+                  <span className="text-xs text-gray-500 ml-1 font-serif">
                     (${(yBalance * Number(tokenYMeta.usdPrice || 0)).toFixed(2)})
                   </span>
                 )}
@@ -622,7 +622,7 @@ export function LPPositions({ address }: LPPositionsProps) {
       {/* Header */}
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold">Your Positions</h1>
-        <span className="text-sm text-muted-foreground">{positionsArray.length} positions found</span>
+        <span className="text-sm text-muted-foreground font-serif">{positionsArray.length} positions found</span>
       </div>
 
         {/* Error Message */}
