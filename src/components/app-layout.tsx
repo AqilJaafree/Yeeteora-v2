@@ -44,7 +44,7 @@ export function AppLayout({
           {children}
         </main>
         <AppFooter />
-        <AppNavbar links={links} />
+        {/* <AppNavbar links={links} /> */}
       </div>
       <Toaster />
     </ThemeProvider>

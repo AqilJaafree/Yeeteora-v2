@@ -7,6 +7,10 @@ import { NewTokenPopup } from './damm-v2-new-token-popup'
 import { Button } from '../ui/button'
 import { TokenCard } from './damm-v2-token-card'
 import { TokenData, isValidTokenData } from '@/lib/validators'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu'
+import { ChevronDown, Check } from 'lucide-react'
+
+type SortBy = 'creation_date' | 'market_cap'
 
 export type { TokenData }
 
@@ -98,6 +102,7 @@ export default function DammV2Feature() {
   const [isPopupOpen, setPopupOpen] = useState(false)
   const [isMounted, setIsMounted] = useState(false)
   const [wsConnected, setWsConnected] = useState(false)
+  const [sortBy, setSortBy] = useState<SortBy>('creation_date')
 
   const expiryTimers = useRef<Record<string, NodeJS.Timeout>>({})
 
@@ -245,11 +250,67 @@ export default function DammV2Feature() {
   const mockTokens = getMockTokens()
   const showMockData = isMounted && liveTokenArray.length === 0
 
+  const applySort = (arr: TokenData[]): TokenData[] => {
+    return [...arr].sort((a, b) =>
+      sortBy === 'creation_date'
+        ? b.tge_at - a.tge_at
+        : b.total_trade_size - a.total_trade_size
+    )
+  }
+
+  const categorizeToken = (token: TokenData): 'high' | 'medium' | 'normal' => {
+    const totalDelta = token.delta_jup + token.delta_other
+    if (token.delta_jup > 20 && totalDelta > 200) return 'high'
+    if (token.delta_jup > 10 && totalDelta > 100) return 'medium'
+    return 'normal'
+  }
+
+  const renderTokenGroups = (tokenArray: TokenData[]) => {
+    const high = tokenArray.filter(t => categorizeToken(t) === 'high')
+    const medium = tokenArray.filter(t => categorizeToken(t) === 'medium')
+    const normal = tokenArray.filter(t => categorizeToken(t) === 'normal')
+
+    return (
+      <>
+        {high.length > 0 && (
+          <div className="rounded-xl border border-red-500/40">
+            <div className="px-4 py-2 text-sm font-medium text-red-400 border-b border-red-500/20 bg-red-500/5">
+              Highest Activity Right Now
+            </div>
+            <div className="p-2 sm:p-3 flex flex-col gap-2">
+              {high.map(token => <TokenCard key={token.mint} token={token} />)}
+            </div>
+          </div>
+        )}
+        {medium.length > 0 && (
+          <div className="rounded-xl border border-yellow-500/40">
+            <div className="px-4 py-2 text-sm font-medium text-yellow-400 border-b border-yellow-500/20 bg-yellow-500/5">
+              Not so high activity
+            </div>
+            <div className="p-2 sm:p-3 flex flex-col gap-2">
+              {medium.map(token => <TokenCard key={token.mint} token={token} />)}
+            </div>
+          </div>
+        )}
+        {normal.length > 0 && (
+          <div className="rounded-xl border border-blue-500/40">
+            <div className="px-4 py-2 text-sm font-medium text-blue-400 border-b border-blue-500/20 bg-blue-500/5">
+              Common / Normal
+            </div>
+            <div className="p-2 sm:p-3 flex flex-col gap-2">
+              {normal.map(token => <TokenCard key={token.mint} token={token} />)}
+            </div>
+          </div>
+        )}
+      </>
+    )
+  }
+
   return (
     <div className="min-h-screen">
-      <AppHero title="Alpha call Damm v2" subtitle="Next-generation Dynamic Automated Market Making strategies" />
+      <AppHero title="New Token Screener" subtitle="Spot tokens with rising buy activity before the crowd" />
 
-      <div className="px-4 sm:px-6 lg:px-[70px] mx-auto flex justify-between items-center mb-4">
+      <div className="px-4 sm:px-6 lg:px-[70px] mx-auto flex flex-wrap justify-between items-center gap-2 mb-4">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             {isMounted && (
@@ -267,19 +328,36 @@ export default function DammV2Feature() {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <Button className="px-3 py-1.5 text-sm sm:px-6 sm:py-3 sm:text-base" onClick={handleNewDAMMv2Pool}>
+          {/* Sort dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="px-3 py-1.5 text-xs sm:text-sm gap-1.5">
+                <span className="hidden sm:inline text-muted-foreground">Sort By:</span>
+                {sortBy === 'creation_date' ? 'Creation Date' : 'Market Cap'}
+                <ChevronDown className="w-3.5 h-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setSortBy('creation_date')} className="gap-2">
+                <Check className={`w-4 h-4 ${sortBy === 'creation_date' ? 'opacity-100' : 'opacity-0'}`} />
+                Creation Date
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setSortBy('market_cap')} className="gap-2">
+                <Check className={`w-4 h-4 ${sortBy === 'market_cap' ? 'opacity-100' : 'opacity-0'}`} />
+                Market Cap
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <Button className="px-3 py-1.5 text-xs sm:text-sm sm:px-6 sm:py-3 sm:text-base" onClick={handleNewDAMMv2Pool}>
             New Pool
           </Button>
         </div>
       </div>
 
-      <div className="px-3 sm:px-4 lg:px-[70px] mx-auto flex flex-col gap-2 pb-6">
-        {liveTokenArray.map((token) => (
-          <TokenCard key={token.mint} token={token} />
-        ))}
-        {showMockData && mockTokens.map((token) => (
-          <TokenCard key={token.mint} token={token} />
-        ))}
+      <div className="px-3 sm:px-4 lg:px-[70px] mx-auto flex flex-col gap-3 pb-6">
+        {isMounted && liveTokenArray.length > 0 && renderTokenGroups(applySort(liveTokenArray))}
+        {showMockData && renderTokenGroups(applySort(mockTokens))}
         {!isMounted && (
           <div className="text-center py-8">
             <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin mx-auto mb-4"></div>
