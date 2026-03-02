@@ -5,10 +5,11 @@ import { useEffect, useRef, useState } from 'react'
 import { AppHero } from '@/components/app-hero'
 import { NewTokenPopup } from './damm-v2-new-token-popup'
 import { Button } from '../ui/button'
-import { TokenCard } from './damm-v2-token-card'
 import { TokenData, isValidTokenData } from '@/lib/validators'
+import { TokenSectionsUI } from './damm-v2-token-sections-ui'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu'
 import { ChevronDown, Check } from 'lucide-react'
+import { ACTIVITY_THRESHOLDS } from './damm-v2-constants'
 
 type SortBy = 'creation_date' | 'market_cap'
 
@@ -258,51 +259,47 @@ export default function DammV2Feature() {
     )
   }
 
+  /**
+   * Categorise a token into one of three activity tiers.
+   *
+   * Uses the delta-based heuristics from ACTIVITY_THRESHOLDS (aligned with the
+   * same boundaries applied inside TokenCard for consistent colouring):
+   *   - high   → delta_jup > HIGH_JUP_DELTA  AND totalDelta > HIGH_TOTAL_DELTA
+   *   - medium → delta_jup > MEDIUM_JUP_DELTA AND totalDelta > MEDIUM_TOTAL_DELTA
+   *   - normal → everything else
+   *
+   * Note: organic score from Jupiter is fetched lazily inside each TokenCard
+   * after the card mounts, so it is not available here for initial bucketing.
+   * The delta heuristics are a reliable real-time proxy.
+   */
   const categorizeToken = (token: TokenData): 'high' | 'medium' | 'normal' => {
     const totalDelta = token.delta_jup + token.delta_other
-    if (token.delta_jup > 20 && totalDelta > 200) return 'high'
-    if (token.delta_jup > 10 && totalDelta > 100) return 'medium'
+    if (
+      token.delta_jup > ACTIVITY_THRESHOLDS.HIGH_JUP_DELTA &&
+      totalDelta > ACTIVITY_THRESHOLDS.HIGH_TOTAL_DELTA
+    ) return 'high'
+    if (
+      token.delta_jup > ACTIVITY_THRESHOLDS.MEDIUM_JUP_DELTA &&
+      totalDelta > ACTIVITY_THRESHOLDS.MEDIUM_TOTAL_DELTA
+    ) return 'medium'
     return 'normal'
   }
 
-  const renderTokenGroups = (tokenArray: TokenData[]) => {
-    const high = tokenArray.filter(t => categorizeToken(t) === 'high')
+  /**
+   * Split a sorted token array into the three activity buckets and pass them
+   * to the dedicated TokenSectionsUI component.
+   */
+  const buildTokenSections = (tokenArray: TokenData[]) => {
+    const high   = tokenArray.filter(t => categorizeToken(t) === 'high')
     const medium = tokenArray.filter(t => categorizeToken(t) === 'medium')
     const normal = tokenArray.filter(t => categorizeToken(t) === 'normal')
 
     return (
-      <>
-        {high.length > 0 && (
-          <div className="rounded-xl border border-red-500/40">
-            <div className="px-4 py-2 text-sm font-medium text-red-400 border-b border-red-500/20 bg-red-500/5">
-              Highest Activity Right Now
-            </div>
-            <div className="p-2 sm:p-3 flex flex-col gap-2">
-              {high.map(token => <TokenCard key={token.mint} token={token} />)}
-            </div>
-          </div>
-        )}
-        {medium.length > 0 && (
-          <div className="rounded-xl border border-yellow-500/40">
-            <div className="px-4 py-2 text-sm font-medium text-yellow-400 border-b border-yellow-500/20 bg-yellow-500/5">
-              Not so high activity
-            </div>
-            <div className="p-2 sm:p-3 flex flex-col gap-2">
-              {medium.map(token => <TokenCard key={token.mint} token={token} />)}
-            </div>
-          </div>
-        )}
-        {normal.length > 0 && (
-          <div className="rounded-xl border border-blue-500/40">
-            <div className="px-4 py-2 text-sm font-medium text-blue-400 border-b border-blue-500/20 bg-blue-500/5">
-              Common / Normal
-            </div>
-            <div className="p-2 sm:p-3 flex flex-col gap-2">
-              {normal.map(token => <TokenCard key={token.mint} token={token} />)}
-            </div>
-          </div>
-        )}
-      </>
+      <TokenSectionsUI
+        highTokens={high}
+        mediumTokens={medium}
+        normalTokens={normal}
+      />
     )
   }
 
@@ -356,8 +353,8 @@ export default function DammV2Feature() {
       </div>
 
       <div className="px-3 sm:px-4 lg:px-[70px] mx-auto flex flex-col gap-3 pb-6">
-        {isMounted && liveTokenArray.length > 0 && renderTokenGroups(applySort(liveTokenArray))}
-        {showMockData && renderTokenGroups(applySort(mockTokens))}
+        {isMounted && liveTokenArray.length > 0 && buildTokenSections(applySort(liveTokenArray))}
+        {showMockData && buildTokenSections(applySort(mockTokens))}
         {!isMounted && (
           <div className="text-center py-8">
             <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin mx-auto mb-4"></div>
