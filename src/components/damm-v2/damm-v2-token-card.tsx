@@ -111,7 +111,51 @@ function Tip({ children, label }: { children: React.ReactNode; label: string }) 
   )
 }
 
+function Spinner({ className }: { className: string }) {
+  return <div className={`rounded-full animate-spin ${className}`} />
+}
+
+interface StatRowProps {
+  label: string
+  tooltip: string
+  value: React.ReactNode
+  valueClassName?: string
+}
+
+function StatRow({ label, tooltip, value, valueClassName = 'font-medium' }: StatRowProps) {
+  return (
+    <div>
+      <Tip label={tooltip}>
+        <div className="text-muted-foreground text-xs mb-0.5 cursor-default w-fit">{label}</div>
+      </Tip>
+      <div className={valueClassName}>{value}</div>
+    </div>
+  )
+}
+
+// ====== Constants ======
+
+const BADGE_BASE = 'px-2 py-0.5 text-xs rounded-full inline-flex items-center gap-1'
+
 // ====== Pure helpers (module-level, no React deps) ======
+
+/** Fetch pools from both sides of the pair and return them deduped, sorted by TVL */
+async function fetchMeteoraPools(tokenMint: string): Promise<MeteoraPool[]> {
+  const [responseA, responseB] = await Promise.all([
+    fetch(`https://dammv2-api.meteora.ag/pools?token_a_mint=${tokenMint}`),
+    fetch(`https://dammv2-api.meteora.ag/pools?token_b_mint=${tokenMint}`),
+  ])
+
+  const parsePools = async (res: Response): Promise<MeteoraPool[]> => {
+    if (!res.ok) return []
+    const data: MeteoraApiResponse = await res.json()
+    return data.data
+  }
+
+  const [poolsA, poolsB] = await Promise.all([parsePools(responseA), parsePools(responseB)])
+  const seen = new Set(poolsA.map(p => p.pool_address))
+  return [...poolsA, ...poolsB.filter(p => !seen.has(p.pool_address))].sort((a, b) => b.tvl - a.tvl)
+}
 
 /** Determine card colour and optional alert title based on Jupiter activity */
 function getActivityLevel(jupDelta: number, totalDelta: number): ActivityLevel {
@@ -247,21 +291,8 @@ export function TokenCard({ token }: TokenCardProps) {
   const checkPoolExists = async (tokenMint: string): Promise<boolean> => {
     try {
       setIsCheckingPool(true)
-
-      const [responseA, responseB] = await Promise.all([
-        fetch(`https://dammv2-api.meteora.ag/pools?token_a_mint=${tokenMint}`),
-        fetch(`https://dammv2-api.meteora.ag/pools?token_b_mint=${tokenMint}`),
-      ])
-
-      const hasPool = async (res: Response): Promise<boolean> => {
-        if (!res.ok) return false
-        const data: MeteoraApiResponse = await res.json()
-        return data.data.length > 0
-      }
-
-      const [hasPoolA, hasPoolB] = await Promise.all([hasPool(responseA), hasPool(responseB)])
-
-      return hasPoolA || hasPoolB
+      const pools = await fetchMeteoraPools(tokenMint)
+      return pools.length > 0
     } catch (error) {
       console.error('Error checking pool existence:', error)
       return false
@@ -272,27 +303,8 @@ export function TokenCard({ token }: TokenCardProps) {
 
   /** Fetch all pools for this token, deduped and sorted by TVL descending */
   const getAllPoolsForToken = async (tokenMint: string): Promise<MeteoraPool[]> => {
-    const pools: MeteoraPool[] = []
-
     try {
-      const [responseA, responseB] = await Promise.all([
-        fetch(`https://dammv2-api.meteora.ag/pools?token_a_mint=${tokenMint}`),
-        fetch(`https://dammv2-api.meteora.ag/pools?token_b_mint=${tokenMint}`),
-      ])
-
-      if (responseA.ok) {
-        const data: MeteoraApiResponse = await responseA.json()
-        pools.push(...data.data)
-      }
-
-      if (responseB.ok) {
-        const dataB: MeteoraApiResponse = await responseB.json()
-        for (const pool of dataB.data) {
-          if (!pools.some(p => p.pool_address === pool.pool_address)) pools.push(pool)
-        }
-      }
-
-      return pools.sort((a, b) => b.tvl - a.tvl)
+      return await fetchMeteoraPools(tokenMint)
     } catch (error) {
       console.error('Error fetching all pools:', error)
       return []
@@ -364,8 +376,8 @@ export function TokenCard({ token }: TokenCardProps) {
   const renderOrganicBadge = () => {
     if (isLoadingJupiterData) {
       return (
-        <span className="px-2 py-0.5 text-xs rounded-full bg-gray-600/50 text-gray-300 inline-flex items-center gap-1">
-          <div className="w-2 h-2 border border-gray-300 border-t-transparent rounded-full animate-spin" />
+        <span className={`${BADGE_BASE} bg-gray-600/50 text-gray-300`}>
+          <Spinner className="w-2 h-2 border border-gray-300 border-t-transparent" />
         </span>
       )
     }
@@ -405,7 +417,7 @@ export function TokenCard({ token }: TokenCardProps) {
 
     return (
       <Tip label={tooltip}>
-        <span className={`px-2 py-0.5 text-xs rounded-full inline-flex items-center gap-1 border ${className}`}>
+        <span className={`${BADGE_BASE} border ${className}`}>
           <Icon className="w-3 h-3" />
           {label}: {score.toFixed(1)}
         </span>
@@ -436,7 +448,7 @@ export function TokenCard({ token }: TokenCardProps) {
               <span className="font-bold text-primary text-sm shrink-0 max-w-[80px] sm:max-w-none truncate">
                 {isLoadingTokenName ? (
                   <span className="inline-flex items-center gap-1 text-xs text-gray-400">
-                    <div className="w-3 h-3 border border-primary/30 border-t-primary rounded-full animate-spin" />
+                    <Spinner className="w-3 h-3 border border-primary/30 border-t-primary" />
                   </span>
                 ) : (
                   getTickerName()
@@ -475,22 +487,22 @@ export function TokenCard({ token }: TokenCardProps) {
               </Tip>
             )}
             {isCheckingPool && poolExists === null && (
-              <span className="px-2 py-0.5 text-xs rounded-full bg-gray-600/50 text-gray-300 inline-flex items-center gap-1">
-                <div className="w-2 h-2 border border-gray-300 border-t-transparent rounded-full animate-spin" />
+              <span className={`${BADGE_BASE} bg-gray-600/50 text-gray-300`}>
+                <Spinner className="w-2 h-2 border border-gray-300 border-t-transparent" />
               </span>
             )}
             {renderOrganicBadge()}
             {jupiterTokenData && (
               <Tip label="Number of unique wallets holding this token">
-                <span className="px-2 py-0.5 text-xs rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 inline-flex items-center gap-1">
+                <span className={`${BADGE_BASE} border bg-blue-500/20 text-blue-300 border-blue-500/30`}>
                   <Users className="w-3 h-3" />
-                  {jupiterTokenData.holderCount.toLocaleString()}
+                  {formatCompactNumber(jupiterTokenData.holderCount)}
                 </span>
               </Tip>
             )}
             {jupiterDataError && !isLoadingJupiterData && (
               <span
-                className="px-2 py-0.5 text-xs rounded-full bg-red-500/20 text-red-400 border border-red-500/30 inline-flex items-center gap-1 cursor-pointer"
+                className={`${BADGE_BASE} border bg-red-500/20 text-red-400 border-red-500/30 cursor-pointer`}
                 title={jupiterDataError}
                 onClick={e => {
                   e.stopPropagation()
@@ -519,48 +531,34 @@ export function TokenCard({ token }: TokenCardProps) {
 
           {/* Stats grid */}
           <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm border-t border-white/10 pt-4">
-            <div>
-              <Tip label="How many new buys/sells happened on Jupiter recently">
-                <div className="text-muted-foreground text-xs mb-0.5 cursor-default w-fit">Changes Jupiter</div>
-              </Tip>
-              <div className="text-green-500 font-medium">
-                +{token.delta_jup}
-                <span className="text-gray-400 ml-1 font-normal">
-                  ({lamportsToSol(token.delta_jupiter_trade_size).toFixed(2)} SOL)
-                </span>
-              </div>
-            </div>
-            <div>
-              <Tip label="How many new buys/sells happened outside of Jupiter (other DEXes)">
-                <div className="text-muted-foreground text-xs mb-0.5 cursor-default w-fit">Changes Non-Jup</div>
-              </Tip>
-              <div className="font-medium">
-                +{token.delta_other}
-                <span className="text-gray-400 ml-1 font-normal">
-                  ({lamportsToSol(token.delta_total_trade_size).toFixed(2)} SOL)
-                </span>
-              </div>
-            </div>
-            <div>
-              <Tip label="Out of all trades, how many were made through Jupiter">
-                <div className="text-muted-foreground text-xs mb-0.5 cursor-default w-fit">Jup Txs Pct</div>
-              </Tip>
-              <div className="text-green-500 font-medium">{token.jupiter_pct.toFixed(2)}%</div>
-            </div>
-            <div>
-              <Tip label="Out of all SOL traded, how much went through Jupiter">
-                <div className="text-muted-foreground text-xs mb-0.5 cursor-default w-fit">Jup Size Pct</div>
-              </Tip>
-              <div className="text-green-500 font-medium">
-                {((token.delta_jupiter_trade_size / token.delta_total_trade_size) * 100).toFixed(2)}%
-              </div>
-            </div>
-            <div>
-              <Tip label="Total number of Jupiter trades ever recorded for this token">
-                <div className="text-muted-foreground text-xs mb-0.5 cursor-default w-fit">Total Jup Txs</div>
-              </Tip>
-              <div className="font-medium">{token.total_jupiter}</div>
-            </div>
+            <StatRow
+              label="Changes Jupiter"
+              tooltip="How many new buys/sells happened on Jupiter recently"
+              valueClassName="text-green-500 font-medium"
+              value={<>+{token.delta_jup}<span className="text-gray-400 ml-1 font-normal">({lamportsToSol(token.delta_jupiter_trade_size).toFixed(2)} SOL)</span></>}
+            />
+            <StatRow
+              label="Changes Non-Jup"
+              tooltip="How many new buys/sells happened outside of Jupiter (other DEXes)"
+              value={<>+{token.delta_other}<span className="text-gray-400 ml-1 font-normal">({lamportsToSol(token.delta_total_trade_size).toFixed(2)} SOL)</span></>}
+            />
+            <StatRow
+              label="Jup Txs Pct"
+              tooltip="Out of all trades, how many were made through Jupiter"
+              valueClassName="text-green-500 font-medium"
+              value={`${token.jupiter_pct.toFixed(2)}%`}
+            />
+            <StatRow
+              label="Jup Size Pct"
+              tooltip="Out of all SOL traded, how much went through Jupiter"
+              valueClassName="text-green-500 font-medium"
+              value={`${((token.delta_jupiter_trade_size / token.delta_total_trade_size) * 100).toFixed(2)}%`}
+            />
+            <StatRow
+              label="Total Jup Txs"
+              tooltip="Total number of Jupiter trades ever recorded for this token"
+              value={token.total_jupiter}
+            />
           </div>
 
           {/* Action buttons */}
@@ -595,7 +593,7 @@ export function TokenCard({ token }: TokenCardProps) {
 
           {isLoadingPools && (
             <div className="flex items-center justify-center py-8 gap-3 text-sm text-gray-400">
-              <div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+              <Spinner className="w-5 h-5 border-2 border-gray-400 border-t-transparent" />
               Loading available pools...
             </div>
           )}

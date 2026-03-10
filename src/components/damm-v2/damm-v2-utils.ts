@@ -1,11 +1,12 @@
 // src/components/damm-v2/damm-v2-utils.ts
 import { FORMAT, TIME } from './damm-v2-constants'
 
-/** Format large numbers with K/M suffix */
+/** Format large numbers with k/M suffix, trimming unnecessary decimals */
 export function formatCompactNumber(value: number): string {
-  if (value >= FORMAT.MILLION) return `${(value / FORMAT.MILLION).toFixed(2)}M`
-  if (value >= FORMAT.THOUSAND) return `${(value / FORMAT.THOUSAND).toFixed(2)}K`
-  return value.toFixed(2)
+  const fmt = (n: number) => parseFloat(n.toFixed(2)).toString()
+  if (value >= FORMAT.MILLION) return `${fmt(value / FORMAT.MILLION)}M`
+  if (value >= FORMAT.THOUSAND) return `${fmt(value / FORMAT.THOUSAND)}k`
+  return fmt(value)
 }
 
 /** Format pool fee as a percentage string */

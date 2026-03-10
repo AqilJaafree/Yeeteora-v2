@@ -8,7 +8,8 @@ import { Button } from '../ui/button'
 import { TokenData, isValidTokenData } from '@/lib/validators'
 import { TokenSectionsUI } from './damm-v2-token-sections-ui'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu'
-import { ChevronDown, Check } from 'lucide-react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog'
+import { ChevronDown, Check, BookOpen } from 'lucide-react'
 import { ACTIVITY_THRESHOLDS } from './damm-v2-constants'
 
 type SortBy = 'creation_date' | 'market_cap'
@@ -88,14 +89,35 @@ function getMockTokens(): TokenData[] {
   ]
 }
 
-// Get WebSocket URL from environment variable with secure fallback
-const getWebSocketURL = () => {
-  if (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_WEBSOCKET_URL) {
-    return process.env.NEXT_PUBLIC_WEBSOCKET_URL
-  }
-  // Fallback - should be set in environment variables
-  return process.env.NEXT_PUBLIC_WEBSOCKET_URL || ''
-}
+const getWebSocketURL = () => process.env.NEXT_PUBLIC_WEBSOCKET_URL ?? ''
+
+// ====== Cheat Sheet Data ======
+
+const SIGNAL_TIERS = [
+  { dot: 'bg-red-500',    textColor: 'text-red-400',    label: 'Highest Activity', desc: 'Token is getting slammed on Jupiter right now. High Jup delta + high total delta — strong momentum signal.' },
+  { dot: 'bg-yellow-500', textColor: 'text-yellow-400', label: 'Medium Activity',  desc: 'Notable buy pressure, not crazy yet. Worth watching — could escalate.' },
+  { dot: 'bg-blue-500',   textColor: 'text-blue-400',   label: 'Normal / Low',     desc: 'Low or baseline trading activity. Could still be early — check organic score.' },
+] as const
+
+const TRADE_STATS = [
+  { label: 'Changes Jupiter',  desc: 'New buys/sells that went through Jupiter in the last update window. Higher = more Jupiter-routed demand. Also shows the SOL volume behind those trades.' },
+  { label: 'Changes Non-Jup',  desc: 'New buys/sells on other DEXes (Raydium, Orca, etc.) in the same window. Useful to see if demand is Jupiter-specific or broad.' },
+  { label: 'Jup Txs %',        desc: 'Out of all trades recorded, how many went through Jupiter. High % = the Jupiter crowd is driving the action.' },
+  { label: 'Jup Size %',       desc: 'Out of all SOL traded, what percentage was routed through Jupiter. Tells you if Jupiter trades are large or small relative to overall volume.' },
+  { label: 'Total Jup Txs',    desc: 'Cumulative Jupiter trade count since the token was first seen. Good for gauging overall maturity vs. fresh signals.' },
+] as const
+
+const CARD_BADGES = [
+  { label: 'Organic Score — High / Medium / Low', labelColor: 'text-green-400',  desc: <>Jupiter's score for how organic (non-bot) the trading is. <span className="text-green-400">≥70 = legit buyers</span>, <span className="text-blue-400">40–69 = mixed</span>, <span className="text-red-400">&lt;40 = likely bots/wash trading</span>. Low score = be careful.</> },
+  { label: 'Holders',                              labelColor: 'text-blue-300',   desc: 'Number of unique wallets currently holding the token. Early signals usually have very few — watch this grow.' },
+  { label: '✓ Pool Exists',                        labelColor: 'text-green-400',  desc: 'A Meteora DAMM v2 pool already exists. You can add liquidity to capture fees from the hype.' },
+  { label: '⚠ No Pool',                            labelColor: 'text-orange-400', desc: 'No DAMM v2 pool yet. You could be the first LP — higher risk, higher reward.' },
+] as const
+
+const OTHER_TERMS = [
+  { label: 'Token Age',       desc: 'How long since the token was first created (TGE). Shown as seconds (s), minutes (m), or hours (h). Fresh = higher risk, higher upside.' },
+  { label: 'Demo Data badge', desc: "Shown when the live WebSocket hasn't delivered any tokens yet. Cards are placeholders — not real signals." },
+] as const
 
 export default function DammV2Feature() {
   const [tokens, setTokens] = useState<Record<string, TokenData>>({})
@@ -104,6 +126,7 @@ export default function DammV2Feature() {
   const [isMounted, setIsMounted] = useState(false)
   const [wsConnected, setWsConnected] = useState(false)
   const [sortBy, setSortBy] = useState<SortBy>('creation_date')
+  const [isCheatSheetOpen, setIsCheatSheetOpen] = useState(false)
 
   const expiryTimers = useRef<Record<string, NodeJS.Timeout>>({})
 
@@ -234,12 +257,6 @@ export default function DammV2Feature() {
     }
   }, [isMounted])
 
-  const handleNewDAMMv2Pool = () => {
-    if (typeof window !== 'undefined') {
-      window.open('https://www.meteora.ag/pools/create', '_blank')
-    }
-  }
-
   const handlePopupClose = (open: boolean) => {
     setPopupOpen(open)
     if (!open) {
@@ -285,27 +302,21 @@ export default function DammV2Feature() {
     return 'normal'
   }
 
-  /**
-   * Split a sorted token array into the three activity buckets and pass them
-   * to the dedicated TokenSectionsUI component.
-   */
+  /** Split a sorted token array into the three activity buckets in a single pass */
   const buildTokenSections = (tokenArray: TokenData[]) => {
-    const high   = tokenArray.filter(t => categorizeToken(t) === 'high')
-    const medium = tokenArray.filter(t => categorizeToken(t) === 'medium')
-    const normal = tokenArray.filter(t => categorizeToken(t) === 'normal')
-
-    return (
-      <TokenSectionsUI
-        highTokens={high}
-        mediumTokens={medium}
-        normalTokens={normal}
-      />
-    )
+    const high: TokenData[] = [], medium: TokenData[] = [], normal: TokenData[] = []
+    for (const t of tokenArray) {
+      const tier = categorizeToken(t)
+      if (tier === 'high') high.push(t)
+      else if (tier === 'medium') medium.push(t)
+      else normal.push(t)
+    }
+    return <TokenSectionsUI highTokens={high} mediumTokens={medium} normalTokens={normal} />
   }
 
   return (
     <div className="min-h-screen">
-      <AppHero title="New Token Screener" subtitle="Spot tokens with rising buy activity before the crowd" />
+      <AppHero title="New Token Signal" subtitle="Fresh new signals on the rise to make the $$$" />
 
       <div className="px-4 sm:px-6 lg:px-[70px] mx-auto flex flex-wrap justify-between items-center gap-2 mb-4">
         <div className="flex items-center gap-3">
@@ -346,8 +357,13 @@ export default function DammV2Feature() {
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <Button className="px-3 py-1.5 text-xs sm:text-sm sm:px-6 sm:py-3 sm:text-base" onClick={handleNewDAMMv2Pool}>
-            New Pool
+          <Button
+            variant="outline"
+            className="px-3 py-1.5 text-xs sm:text-sm sm:px-4 sm:py-2 gap-1.5"
+            onClick={() => setIsCheatSheetOpen(true)}
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            Cheat Sheet
           </Button>
         </div>
       </div>
@@ -364,12 +380,82 @@ export default function DammV2Feature() {
       </div>
       
       {isMounted && (
-        <NewTokenPopup 
-          token={newToken} 
-          open={isPopupOpen} 
-          onOpenChange={handlePopupClose} 
+        <NewTokenPopup
+          token={newToken}
+          open={isPopupOpen}
+          onOpenChange={handlePopupClose}
         />
       )}
+
+      <Dialog open={isCheatSheetOpen} onOpenChange={setIsCheatSheetOpen}>
+        <DialogContent className="bg-[#1a1a2e] border border-gray-600 text-white max-w-lg w-full sm:max-h-[85vh] sm:overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <BookOpen className="w-4 h-4 text-primary" />
+              Cheat Sheet — Glossary
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-5 text-sm pt-1">
+            <section>
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Signal Tiers</h3>
+              <div className="flex flex-col gap-2">
+                {SIGNAL_TIERS.map(({ dot, textColor, label, desc }) => (
+                  <div key={label} className="flex items-start gap-2">
+                    <span className={`mt-0.5 w-2.5 h-2.5 rounded-full ${dot} shrink-0`} />
+                    <div>
+                      <span className={`font-medium ${textColor}`}>{label}</span>
+                      <p className="text-gray-400 text-xs mt-0.5">{desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <div className="border-t border-white/10" />
+
+            <section>
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Trade Stats (in detail modal)</h3>
+              <div className="flex flex-col gap-3">
+                {TRADE_STATS.map(({ label, desc }) => (
+                  <div key={label}>
+                    <span className="font-medium text-white">{label}</span>
+                    <p className="text-gray-400 text-xs mt-0.5">{desc}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <div className="border-t border-white/10" />
+
+            <section>
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Card Badges</h3>
+              <div className="flex flex-col gap-3">
+                {CARD_BADGES.map(({ label, labelColor, desc }) => (
+                  <div key={label}>
+                    <span className={`font-medium ${labelColor}`}>{label}</span>
+                    <p className="text-gray-400 text-xs mt-0.5">{desc}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <div className="border-t border-white/10" />
+
+            <section>
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Other</h3>
+              <div className="flex flex-col gap-3">
+                {OTHER_TERMS.map(({ label, desc }) => (
+                  <div key={label}>
+                    <span className="font-medium text-white">{label}</span>
+                    <p className="text-gray-400 text-xs mt-0.5">{desc}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

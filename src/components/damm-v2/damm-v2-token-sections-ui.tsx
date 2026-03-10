@@ -89,13 +89,13 @@ function TokenSection({ tier, tokens }: TokenSectionProps) {
             No tokens in this category yet
           </div>
         ) : (
-          /* Horizontal scrollable row — 3 columns on md+, 1 on mobile */
+          /* 1 column on mobile, 3 columns on md+ */
           <div
-            className="p-3 sm:p-4 overflow-x-auto"
+            className="p-3 sm:p-4"
             role="list"
             aria-label={`${config.title} tokens`}
           >
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 min-w-0 md:min-w-[720px]">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {tokens.map((token) => (
                 <div key={token.mint} role="listitem">
                   <TokenCard token={token} />
