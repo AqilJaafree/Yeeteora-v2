@@ -1,6 +1,20 @@
 import type { NextConfig } from 'next'
+import path from 'path'
+
+const jotaiPath = path.dirname(require.resolve('jotai/package.json'))
 
 const nextConfig: NextConfig = {
+  webpack(config) {
+    config.resolve.alias['jotai'] = jotaiPath
+    return config
+  },
+  experimental: {
+    turbo: {
+      resolveAlias: {
+        jotai: jotaiPath,
+      },
+    },
+  },
   images: {
     remotePatterns: [
       {
