@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { WalletButton } from '@/components/solana/solana-provider'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog'
-import { Bell, BellOff, ChevronLeft, ChevronRight, Menu, X } from 'lucide-react'
+import { Bell, BellOff, ChevronDown, ChevronLeft, ChevronRight, Menu, X } from 'lucide-react'
 
 const AW: React.CSSProperties = { fontFamily: "'Audiowide', sans-serif" }
 
@@ -199,6 +199,117 @@ function TutorialStepPanel({ step, isMobile = false }: { step: TutorialStepData;
   )
 }
 
+// ─── Learn FAQ data ───────────────────────────────────────────────────────────
+
+interface FAQItem {
+  question: string
+  answer: React.ReactNode
+}
+
+const LEARN_FAQ: FAQItem[] = [
+  {
+    question: 'What is DLMM ?',
+    answer: (
+      <div className="space-y-2.5">
+        <p><span className="text-cyan-300 font-semibold">DLMM</span> stands for <span className="text-white font-medium">Dynamic Liquidity Market Maker</span> — Meteora&apos;s concentrated liquidity product on Solana.</p>
+        <p>Unlike a regular AMM that spreads your liquidity across all prices, DLMM lets you pick a tight price range called <span className="text-cyan-300 font-medium">bins</span>. When the price stays inside your range, you capture a much larger share of swap fees. When it moves out, you stop earning until it comes back.</p>
+        <p className="text-gray-400 text-xs">Think of it like a food stall set up only on the busiest street corner — great returns when people walk by, no sales when they don&apos;t.</p>
+      </div>
+    ),
+  },
+  {
+    question: 'How about DAMM ?',
+    answer: (
+      <div className="space-y-2.5">
+        <p><span className="text-cyan-300 font-semibold">DAMM v2</span> stands for <span className="text-white font-medium">Dynamic Automated Market Maker v2</span> — also by Meteora, but built for new tokens.</p>
+        <p>DAMM v2 pools use a virtual price curve that starts concentrated near the launch price and widens as trading grows. Early LPs earn great fees without managing positions manually.</p>
+        <p>Yeeteora&apos;s signal feed watches for tokens with fresh DAMM v2 pools — catching the fee rush before the crowd arrives.</p>
+      </div>
+    ),
+  },
+  {
+    question: 'Why do you give out free signals ?',
+    answer: (
+      <div className="space-y-2.5">
+        <p>The honest answer: <span className="text-cyan-300 font-medium">liquidity benefits everyone</span>. More LPs in a pool means tighter spreads and lower fees for traders, which attracts more volume, which pays more fees back to LPs. It&apos;s a flywheel.</p>
+        <p>We want to make LP strategies accessible to people who don&apos;t have time to monitor WebSocket feeds and filter hundreds of tokens manually. Yeeteora automates that pipeline and surfaces only the interesting ones.</p>
+        <p className="text-gray-400 text-xs">No hidden agenda. No premium tier selling the same data faster. What you see is what we use.</p>
+      </div>
+    ),
+  },
+  {
+    question: 'Are your signals good enough ?',
+    answer: (
+      <div className="space-y-2.5">
+        <p>Signals are derived from two sources:</p>
+        <ul className="space-y-1.5 ml-1">
+          <li className="flex items-start gap-2"><span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-cyan-400 shrink-0" /><span><span className="text-cyan-300 font-medium">Real-time trade deltas</span> — we track buys hitting Jupiter vs other DEXes in rolling windows. A spike on Jupiter often means retail is piling in via the aggregator.</span></li>
+          <li className="flex items-start gap-2"><span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-cyan-400 shrink-0" /><span><span className="text-cyan-300 font-medium">Jupiter Organic Score</span> — Jupiter&apos;s own metric for filtering bot activity. Above 70 = clean organic demand. Below 40 = likely bots or wash trading.</span></li>
+        </ul>
+        <p className="text-gray-400 text-xs">No signal is perfect. Treat these as a starting point, not a guarantee. Always check token age, holder count, and pool conditions before committing.</p>
+      </div>
+    ),
+  },
+  {
+    question: 'Can I earn money with this ?',
+    answer: (
+      <div className="space-y-2.5">
+        <p>Yes — but with real risk. Providing liquidity earns you swap fees every time a trade passes through your pool. During a hype cycle on a new token this can be significant.</p>
+        <ul className="space-y-1.5 ml-1">
+          <li className="flex items-start gap-2"><span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-yellow-400 shrink-0" /><span><span className="text-yellow-300 font-medium">Impermanent loss</span> — if the token pumps or dumps hard, your LP value can end up lower than just holding.</span></li>
+          <li className="flex items-start gap-2"><span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-yellow-400 shrink-0" /><span><span className="text-yellow-300 font-medium">Rug pulls &amp; low liquidity</span> — new tokens carry smart contract risk and can drain to zero. Only use capital you can afford to lose.</span></li>
+          <li className="flex items-start gap-2"><span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-yellow-400 shrink-0" /><span><span className="text-yellow-300 font-medium">Timing</span> — joining too late means the fee rush is over and you&apos;re holding a deflating token as other LPs exit.</span></li>
+        </ul>
+      </div>
+    ),
+  },
+  {
+    question: 'Any final words ?',
+    answer: (
+      <div className="space-y-2.5">
+        <p>DeFi rewards people who do their homework. Before adding liquidity:</p>
+        <ul className="space-y-1.5 ml-1">
+          <li className="flex items-start gap-2"><span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-primary/80 shrink-0" /><span>Check the token&apos;s social presence and whether there&apos;s a real project behind it.</span></li>
+          <li className="flex items-start gap-2"><span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-primary/80 shrink-0" /><span>Verify the pool address on Meteora before signing anything.</span></li>
+          <li className="flex items-start gap-2"><span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-primary/80 shrink-0" /><span>Never put in more than you&apos;re comfortable watching go to zero.</span></li>
+        </ul>
+        <p className="text-cyan-300/80 font-medium text-xs mt-1">This is not financial advice. Yeeteora is a tool that saves you time — the decisions are always yours.</p>
+      </div>
+    ),
+  },
+]
+
+function LearnAccordionItem({
+  item,
+  index,
+  isOpen,
+  onToggle,
+}: {
+  item: FAQItem
+  index: number
+  isOpen: boolean
+  onToggle: () => void
+}) {
+  return (
+    <div className={`rounded-xl border transition-all duration-300 ${isOpen ? 'border-cyan-500/50 bg-cyan-950/20' : 'border-white/[0.06] bg-white/[0.02] hover:border-white/[0.10]'}`}>
+      <button className="w-full flex items-center justify-between gap-4 px-4 py-3.5 text-left" onClick={onToggle} aria-expanded={isOpen}>
+        <div className="flex items-center gap-3 min-w-0">
+          <span className={`shrink-0 w-5 h-5 rounded-full border text-[10px] font-mono font-bold flex items-center justify-center transition-colors ${isOpen ? 'border-cyan-400/60 text-cyan-400 bg-cyan-400/10' : 'border-white/20 text-white/40'}`}>{index + 1}</span>
+          <span className={`font-semibold text-sm transition-colors ${isOpen ? 'text-cyan-300' : 'text-white/80'}`}>{item.question}</span>
+        </div>
+        <ChevronDown className={`shrink-0 h-4 w-4 transition-transform duration-300 ${isOpen ? 'rotate-180 text-cyan-400' : 'text-white/30'}`} />
+      </button>
+      <div className={`grid transition-all duration-300 ${isOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
+        <div className="overflow-hidden">
+          <div className="px-4 pb-4 pt-1 text-sm text-gray-300 leading-relaxed border-t border-white/[0.06]">
+            {item.answer}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── App Header ───────────────────────────────────────────────────────────────
 
 export function AppHeader() {
@@ -207,6 +318,8 @@ export function AppHeader() {
   const [tutorialOpen, setTutorialOpen] = useState(false)
   const [mobileStep, setMobileStep] = useState(0)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [learnOpen, setLearnOpen] = useState(false)
+  const [learnOpenIndex, setLearnOpenIndex] = useState<number | null>(null)
 
   const isNotificationUnavailable =
     !('Notification' in window) || notificationPermission === 'denied'
@@ -295,12 +408,12 @@ export function AppHeader() {
             >
               Tutorial
             </button>
-            <Link
-              href="/learn"
+            <button
+              onClick={() => setLearnOpen(true)}
               className="text-xl font-bold text-muted-foreground hover:text-primary transition-colors"
             >
               Learn
-            </Link>
+            </button>
           </div>
         </div>
 
@@ -335,13 +448,12 @@ export function AppHeader() {
           >
             Tutorial
           </button>
-          <Link
-            href="/learn"
-            onClick={() => setMenuOpen(false)}
-            className="text-sm font-bold text-muted-foreground hover:text-primary transition-colors py-2 px-1"
+          <button
+            onClick={() => { setLearnOpen(true); setMenuOpen(false) }}
+            className="text-left text-sm font-bold text-muted-foreground hover:text-primary transition-colors py-2 px-1"
           >
             Learn
-          </Link>
+          </button>
         </div>
       )}
 
@@ -401,6 +513,39 @@ export function AppHeader() {
           <p className="text-center text-gray-500 mt-5 leading-relaxed" style={{ ...AW, fontSize: '0.65rem' }}>
             This is not in any way a financial advice. Please for the love of god, do your own research first.
             This platform acts as a tool for you. The signal exist to save your time.
+          </p>
+        </DialogContent>
+      </Dialog>
+
+      {/* Learn Dialog */}
+      <Dialog open={learnOpen} onOpenChange={(open) => { setLearnOpen(open); if (!open) setLearnOpenIndex(null) }}>
+        <DialogContent
+          className="w-[95vw] max-w-[95vw] sm:max-w-[600px] border border-cyan-500/40 bg-[#0b0e18] p-5 md:p-8 max-h-[90vh] overflow-y-auto"
+          style={{ boxShadow: '0 0 60px rgba(0,200,255,0.07), inset 0 0 40px rgba(0,0,0,0.5)' }}
+        >
+          <DialogHeader>
+            <DialogTitle className="text-xl md:text-2xl text-cyan-400 mb-1" style={AW}>
+              Let&apos;s gain some knowledge
+            </DialogTitle>
+            <p className="text-gray-500 text-xs" style={AW}>
+              Core concepts behind Yeeteora and how to use it.
+            </p>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-2 mt-4">
+            {LEARN_FAQ.map((item, i) => (
+              <LearnAccordionItem
+                key={item.question}
+                item={item}
+                index={i}
+                isOpen={learnOpenIndex === i}
+                onToggle={() => setLearnOpenIndex((prev) => (prev === i ? null : i))}
+              />
+            ))}
+          </div>
+
+          <p className="text-center text-gray-600 mt-5 leading-relaxed" style={{ ...AW, fontSize: '0.6rem' }}>
+            To get more understanding, try using the power of the internet. You might be surprised how well it can help you.
           </p>
         </DialogContent>
       </Dialog>
