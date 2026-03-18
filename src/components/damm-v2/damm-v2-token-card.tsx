@@ -19,7 +19,7 @@ import {
   parseJupiterError,
   getErrorLabel,
 } from './damm-v2-utils'
-import { ACTIVITY_THRESHOLDS, ORGANIC_SCORE, NOTIFICATION } from './damm-v2-constants'
+import { ACTIVITY_THRESHOLDS, ORGANIC_SCORE, NOTIFICATION, notificationGate } from './damm-v2-constants'
 
 // ====== Types ======
 
@@ -227,6 +227,7 @@ export function TokenCard({ token }: TokenCardProps) {
   // ── Notification helpers ──
 
   const playNotificationSound = () => {
+    if (notificationGate.muted) return
     new Audio(NOTIFICATION.SOUND_PATH).play().catch(() => {})
   }
 

@@ -14,6 +14,9 @@ export const ORGANIC_SCORE = {
   MEDIUM_THRESHOLD: 40,
 } as const
 
+/** Mute gate — set to true while any overlay is open to suppress notification sounds */
+export const notificationGate = { muted: false }
+
 /** Notification settings */
 export const NOTIFICATION = {
   COOLDOWN_MS: 30_000, // 30 seconds between alerts per token

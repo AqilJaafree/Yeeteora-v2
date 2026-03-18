@@ -5,7 +5,7 @@ import { FORMAT, TIME } from './damm-v2-constants'
 export function formatCompactNumber(value: number): string {
   const fmt = (n: number) => parseFloat(n.toFixed(2)).toString()
   if (value >= FORMAT.MILLION) return `${fmt(value / FORMAT.MILLION)}M`
-  if (value >= FORMAT.THOUSAND) return `${fmt(value / FORMAT.THOUSAND)}k`
+  if (value >= FORMAT.THOUSAND) return `${Math.round(value / FORMAT.THOUSAND)}k`
   return fmt(value)
 }
 

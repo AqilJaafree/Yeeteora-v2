@@ -421,14 +421,14 @@ export function AppHeader() {
         <div className="flex items-center gap-2 md:gap-4">
           <Button
             variant="secondary"
-            className="flex items-center gap-1 md:gap-2 px-2 md:px-4"
+            className="flex items-center gap-1 md:gap-2 p-1.5 sm:px-2 md:px-4"
             onClick={handleToggleNotifications}
             disabled={isNotificationUnavailable}
           >
             {notificationButtonIcon}
             <span className="hidden sm:inline text-sm">{notificationButtonText}</span>
           </Button>
-          <WalletButton />
+          <WalletButton>Login</WalletButton>
           <button
             className="md:hidden p-1.5 text-muted-foreground hover:text-primary transition-colors"
             onClick={() => setMenuOpen((prev) => !prev)}
@@ -439,21 +439,29 @@ export function AppHeader() {
         </div>
       </div>
 
-      {/* Mobile dropdown menu */}
+      {/* Mobile nav overlay */}
       {menuOpen && (
-        <div className="md:hidden mt-2 flex flex-col gap-1 border-t border-border/40 pt-3 pb-1">
-          <button
-            onClick={() => { setTutorialOpen(true); setMenuOpen(false) }}
-            className="text-left text-sm font-bold text-muted-foreground hover:text-primary transition-colors py-2 px-1"
+        <div
+          className="md:hidden fixed inset-0 z-40"
+          onClick={() => setMenuOpen(false)}
+        >
+          <div
+            className="absolute top-[56px] left-0 right-0 mx-3 rounded-xl border border-border/60 bg-background/95 backdrop-blur-md shadow-xl p-4 flex flex-col gap-1"
+            onClick={(e) => e.stopPropagation()}
           >
-            Tutorial
-          </button>
-          <button
-            onClick={() => { setLearnOpen(true); setMenuOpen(false) }}
-            className="text-left text-sm font-bold text-muted-foreground hover:text-primary transition-colors py-2 px-1"
-          >
-            Learn
-          </button>
+            <button
+              onClick={() => { setTutorialOpen(true); setMenuOpen(false) }}
+              className="text-left text-sm font-bold text-muted-foreground hover:text-primary transition-colors py-3 px-3 rounded-lg hover:bg-muted/40"
+            >
+              Tutorial
+            </button>
+            <button
+              onClick={() => { setLearnOpen(true); setMenuOpen(false) }}
+              className="text-left text-sm font-bold text-muted-foreground hover:text-primary transition-colors py-3 px-3 rounded-lg hover:bg-muted/40"
+            >
+              Learn
+            </button>
+          </div>
         </div>
       )}
 
@@ -478,7 +486,18 @@ export function AppHeader() {
 
           {/* Mobile: one step at a time */}
           <div className="md:hidden">
-            <TutorialStepPanel step={TUTORIAL_STEPS[mobileStep]} isMobile />
+            <div className="grid">
+              {TUTORIAL_STEPS.map((step, i) => (
+                <div
+                  key={step.label}
+                  style={{ gridArea: '1 / 1' }}
+                  className={i !== mobileStep ? 'invisible pointer-events-none' : ''}
+                  aria-hidden={i !== mobileStep}
+                >
+                  <TutorialStepPanel step={step} isMobile />
+                </div>
+              ))}
+            </div>
 
             <div className="flex items-center justify-between mt-5">
               <button
@@ -520,7 +539,7 @@ export function AppHeader() {
       {/* Learn Dialog */}
       <Dialog open={learnOpen} onOpenChange={(open) => { setLearnOpen(open); if (!open) setLearnOpenIndex(null) }}>
         <DialogContent
-          className="w-[95vw] max-w-[95vw] sm:max-w-[600px] border border-cyan-500/40 bg-[#0b0e18] p-5 md:p-8 max-h-[90vh] overflow-y-auto"
+          className="w-[95vw] max-w-[95vw] sm:max-w-[600px] border border-cyan-500/40 bg-[#0b0e18] p-5 md:p-8"
           style={{ boxShadow: '0 0 60px rgba(0,200,255,0.07), inset 0 0 40px rgba(0,0,0,0.5)' }}
         >
           <DialogHeader>

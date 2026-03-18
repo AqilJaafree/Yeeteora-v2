@@ -80,7 +80,7 @@ function TokenSection({ tier, tokens }: TokenSectionProps) {
 
       {/* Bordered container */}
       <div
-        className={`rounded-xl border-2 ${config.borderClass} overflow-hidden`}
+        className="rounded-xl border border-border/30 overflow-hidden"
         aria-label={`${config.title} section`}
       >
         {tokens.length === 0 ? (
